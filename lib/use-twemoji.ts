@@ -1,26 +1,25 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 
 /**
  * Twemoji - replaces native emojis with Twitter-style SVG images.
  * This ensures consistent mobile-style emoji rendering across all platforms.
  * Uses Twemoji CDN (jdecked fork - maintained, MIT licensed).
+ *
+ * IMPORTANT: We avoid parsing the entire document.body to prevent React
+ * DOM conflicts (removeChild errors). Instead, we only parse elements
+ * that have the `data-twemoji` attribute.
  */
 
 let twemojiLoaded = false;
-let twemojiScript: HTMLScriptElement | null = null;
+let twemojiLoading: Promise<void> | null = null;
 
 function loadTwemojiScript(): Promise<void> {
     if (twemojiLoaded && (window as any).twemoji) return Promise.resolve();
+    if (twemojiLoading) return twemojiLoading;
 
-    return new Promise((resolve, reject) => {
-        if (twemojiScript) {
-            // Already loading
-            twemojiScript.addEventListener('load', () => resolve());
-            return;
-        }
-
+    twemojiLoading = new Promise((resolve, reject) => {
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/@twemoji/api@latest/dist/twemoji.min.js';
         script.crossOrigin = 'anonymous';
@@ -29,18 +28,18 @@ function loadTwemojiScript(): Promise<void> {
             resolve();
         };
         script.onerror = () => reject(new Error('Failed to load Twemoji'));
-        twemojiScript = script;
         document.head.appendChild(script);
     });
+
+    return twemojiLoading;
 }
 
 /** Parse a specific DOM element with Twemoji */
 export function parseTwemoji(element?: HTMLElement | null) {
     const tw = (window as any).twemoji;
-    if (!tw) return;
+    if (!tw || !element) return;
 
-    const target = element || document.body;
-    tw.parse(target, {
+    tw.parse(element, {
         folder: 'svg',
         ext: '.svg',
         base: 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/',
@@ -48,44 +47,78 @@ export function parseTwemoji(element?: HTMLElement | null) {
 }
 
 /**
- * Hook that loads Twemoji and auto-parses emojis in the document.
- * Re-parses on every render cycle via MutationObserver.
+ * Safe Twemoji parsing that only targets elements with [data-twemoji].
+ * This avoids modifying React-managed DOM nodes directly.
+ */
+function parseTwemojiSafe() {
+    const tw = (window as any).twemoji;
+    if (!tw) return;
+
+    // Only parse elements explicitly marked for Twemoji
+    const targets = document.querySelectorAll('[data-twemoji]');
+    targets.forEach((el) => {
+        tw.parse(el as HTMLElement, {
+            folder: 'svg',
+            ext: '.svg',
+            base: 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/',
+        });
+    });
+}
+
+/**
+ * Hook that loads Twemoji and auto-parses emojis.
+ * Only targets elements with the `data-twemoji` attribute to avoid
+ * React DOM conflicts (removeChild / insertBefore errors).
  */
 export function useTwemoji() {
-    const parse = useCallback(() => {
-        if ((window as any).twemoji) {
-            parseTwemoji(document.body);
-        }
+    const observerRef = useRef<MutationObserver | null>(null);
+    const parseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isParsing = useRef(false);
+
+    const debouncedParse = useCallback(() => {
+        if (parseTimeoutRef.current) clearTimeout(parseTimeoutRef.current);
+        parseTimeoutRef.current = setTimeout(() => {
+            if (isParsing.current) return;
+            isParsing.current = true;
+            // Disconnect observer during parsing to avoid re-trigger loop
+            observerRef.current?.disconnect();
+            parseTwemojiSafe();
+            // Reconnect observer after parsing
+            requestAnimationFrame(() => {
+                observerRef.current?.observe(document.body, {
+                    childList: true,
+                    subtree: true,
+                });
+                isParsing.current = false;
+            });
+        }, 200);
     }, []);
 
     useEffect(() => {
-        let observer: MutationObserver | null = null;
-        let parseTimeout: ReturnType<typeof setTimeout> | null = null;
-
-        // Debounced parse to avoid excessive re-parses
-        const debouncedParse = () => {
-            if (parseTimeout) clearTimeout(parseTimeout);
-            parseTimeout = setTimeout(() => {
-                parse();
-            }, 100);
-        };
-
         loadTwemojiScript().then(() => {
             // Initial parse
-            parse();
+            parseTwemojiSafe();
 
-            // Observe DOM changes to re-parse new emojis
-            observer = new MutationObserver(debouncedParse);
+            // Observe DOM changes to re-parse new emojis (childList only, no characterData)
+            const observer = new MutationObserver((mutations) => {
+                // Only re-parse if there are actual node additions (not Twemoji's own changes)
+                const hasRelevantChange = mutations.some(m =>
+                    m.type === 'childList' && m.addedNodes.length > 0
+                );
+                if (hasRelevantChange) {
+                    debouncedParse();
+                }
+            });
+            observerRef.current = observer;
             observer.observe(document.body, {
                 childList: true,
                 subtree: true,
-                characterData: true,
             });
         }).catch(console.error);
 
         return () => {
-            observer?.disconnect();
-            if (parseTimeout) clearTimeout(parseTimeout);
+            observerRef.current?.disconnect();
+            if (parseTimeoutRef.current) clearTimeout(parseTimeoutRef.current);
         };
-    }, [parse]);
+    }, [debouncedParse]);
 }

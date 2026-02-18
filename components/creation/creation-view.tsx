@@ -772,7 +772,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
                                         <CardHeader className="pt-8"> {/* Added padding for badge */}
                                             <div className="text-xs font-mono text-primary mb-2 uppercase tracking-wide">{h.angle}</div>
-                                            <CardTitle className="leading-tight text-lg min-h-[60px]">"{h.hook}"</CardTitle>
+                                            <CardTitle className="leading-tight text-lg min-h-[60px]" data-twemoji>"{h.hook}"</CardTitle>
                                         </CardHeader>
                                         <CardContent>
                                             <p className="text-sm text-muted-foreground">{h.reason}</p>
@@ -1289,7 +1289,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 </div>
 
                                 {/* TikTok-style text overlay — matches editor default (outline mode) */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center px-3 pointer-events-none z-10">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-3 pointer-events-none z-10" data-twemoji>
                                     {paragraphs.length > 0 ? paragraphs.map((paragraph, pIdx) => {
                                         const isLastSlide = index === slides.length - 1;
                                         const fontSize = getAutoFontSize(paragraph, pIdx === 0, index === 0 && pIdx === 0, isLastSlide);
