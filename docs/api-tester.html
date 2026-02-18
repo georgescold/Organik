@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revolution API Tester</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .response {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .response.show {
+            display: block;
+        }
+
+        .response.error {
+            border-left-color: #e74c3c;
+            background: #fee;
+        }
+
+        .response.success {
+            border-left-color: #27ae60;
+            background: #efe;
+        }
+
+        .response-header {
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-200 {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status-400, .status-401, .status-403, .status-404, .status-429, .status-500 {
+            background: #e74c3c;
+            color: white;
+        }
+
+        pre {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e1e8ed;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            font-size: 1em;
+            font-weight: 600;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .info-box strong {
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Revolution API Tester</h1>
+            <p>Testez l'API de génération de carrousels en temps réel</p>
+        </div>
+
+        <div class="card">
+            <div class="info-box">
+                <strong>ℹ️ Configuration requise:</strong><br>
+                1. Créez une clé API dans le dashboard<br>
+                2. Copiez votre clé (format: sk_live_xxx)<br>
+                3. Collez-la ci-dessous pour tester l'API
+            </div>
+
+            <div class="form-group">
+                <label for="apiKey">🔑 Clé API</label>
+                <input type="password" id="apiKey" placeholder="sk_live_votre_cle_ici">
+            </div>
+
+            <div class="form-group">
+                <label for="baseUrl">🌐 Base URL</label>
+                <input type="text" id="baseUrl" value="">
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" data-tab="generate">Générer</button>
+                <button class="tab" data-tab="list">Lister</button>
+                <button class="tab" data-tab="get">Obtenir</button>
+                <button class="tab" data-tab="delete">Supprimer</button>
+            </div>
+
+            <!-- Tab: Generate -->
+            <div class="tab-content active" id="generate">
+                <h3>POST /carousels/generate</h3>
+                <p style="color: #666; margin-bottom: 20px;">Génère un nouveau carrousel avec IA</p>
+
+                <div class="form-group">
+                    <label for="topic">📝 Sujet du carrousel</label>
+                    <input type="text" id="topic" placeholder="Ex: 5 astuces pour mieux dormir" value="5 tips fitness">
+                </div>
+
+                <div class="form-group">
+                    <label for="slideCount">📊 Nombre de slides (5-10)</label>
+                    <input type="number" id="slideCount" min="5" max="10" value="7">
+                </div>
+
+                <button class="btn" onclick="generateCarousel()">
+                    🚀 Générer le Carrousel
+                </button>
+
+                <div id="generateResponse" class="response"></div>
+            </div>
+
+            <!-- Tab: List -->
+            <div class="tab-content" id="list">
+                <h3>GET /carousels</h3>
+                <p style="color: #666; margin-bottom: 20px;">Liste tous vos carrousels</p>
+
+                <div class="form-group">
+                    <label for="limit">📄 Limite</label>
+                    <input type="number" id="limit" value="20">
+                </div>
+
+                <div class="form-group">
+                    <label for="offset">➡️ Offset</label>
+                    <input type="number" id="offset" value="0">
+                </div>
+
+                <button class="btn" onclick="listCarousels()">
+                    📋 Lister les Carrousels
+                </button>
+
+                <div id="listResponse" class="response"></div>
+            </div>
+
+            <!-- Tab: Get -->
+            <div class="tab-content" id="get">
+                <h3>GET /carousels/:id</h3>
+                <p style="color: #666; margin-bottom: 20px;">Récupère un carrousel spécifique</p>
+
+                <div class="form-group">
+                    <label for="carouselId">🆔 ID du carrousel</label>
+                    <input type="text" id="carouselId" placeholder="clxxx123...">
+                </div>
+
+                <button class="btn" onclick="getCarousel()">
+                    🔍 Obtenir le Carrousel
+                </button>
+
+                <div id="getResponse" class="response"></div>
+            </div>
+
+            <!-- Tab: Delete -->
+            <div class="tab-content" id="delete">
+                <h3>DELETE /carousels/:id</h3>
+                <p style="color: #666; margin-bottom: 20px;">Supprime un carrousel définitivement</p>
+
+                <div class="form-group">
+                    <label for="deleteId">🆔 ID du carrousel</label>
+                    <input type="text" id="deleteId" placeholder="clxxx123...">
+                </div>
+
+                <button class="btn" onclick="deleteCarousel()">
+                    🗑️ Supprimer le Carrousel
+                </button>
+
+                <div id="deleteResponse" class="response"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-detect base URL on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const baseUrlInput = document.getElementById('baseUrl');
+            if (!baseUrlInput.value) {
+                // Auto-detect: use current origin + /api/v1
+                const autoUrl = window.location.origin + '/api/v1';
+                baseUrlInput.value = autoUrl;
+                console.log('🔧 Auto-detected Base URL:', autoUrl);
+            }
+        });
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(tabName).classList.add('active');
+            });
+        });
+
+        function getHeaders() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                alert('⚠️ Veuillez entrer votre clé API');
+                throw new Error('Missing API key');
+            }
+            return {
+                'X-API-Key': apiKey,
+                'Content-Type': 'application/json'
+            };
+        }
+
+        function getBaseUrl() {
+            return document.getElementById('baseUrl').value;
+        }
+
+        function showResponse(elementId, response, status) {
+            const element = document.getElementById(elementId);
+            element.classList.remove('show', 'success', 'error');
+
+            setTimeout(() => {
+                const statusClass = status >= 200 && status < 300 ? 'success' : 'error';
+                element.classList.add('show', statusClass);
+
+                element.innerHTML = `
+                    <div class="response-header">
+                        <span>Réponse</span>
+                        <span class="status-badge status-${status}">Status: ${status}</span>
+                    </div>
+                    <pre>${JSON.stringify(response, null, 2)}</pre>
+                `;
+            }, 100);
+        }
+
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.classList.remove('show');
+            setTimeout(() => {
+                element.classList.add('show');
+                element.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 15px;">Traitement en cours...</p>
+                    </div>
+                `;
+            }, 100);
+        }
+
+        async function generateCarousel() {
+            const topic = document.getElementById('topic').value;
+            const slideCount = parseInt(document.getElementById('slideCount').value);
+
+            if (!topic) {
+                alert('⚠️ Veuillez entrer un sujet');
+                return;
+            }
+
+            showLoading('generateResponse');
+
+            try {
+                const response = await fetch(`${getBaseUrl()}/carousels/generate`, {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ topic, slideCount })
+                });
+
+                const data = await response.json();
+                showResponse('generateResponse', data, response.status);
+
+                if (response.ok && data.id) {
+                    document.getElementById('carouselId').value = data.id;
+                    document.getElementById('deleteId').value = data.id;
+                }
+            } catch (error) {
+                showResponse('generateResponse', { error: error.message }, 500);
+            }
+        }
+
+        async function listCarousels() {
+            const limit = document.getElementById('limit').value;
+            const offset = document.getElementById('offset').value;
+
+            showLoading('listResponse');
+
+            try {
+                const response = await fetch(
+                    `${getBaseUrl()}/carousels?limit=${limit}&offset=${offset}`,
+                    { headers: getHeaders() }
+                );
+
+                const data = await response.json();
+                showResponse('listResponse', data, response.status);
+            } catch (error) {
+                showResponse('listResponse', { error: error.message }, 500);
+            }
+        }
+
+        async function getCarousel() {
+            const id = document.getElementById('carouselId').value;
+
+            if (!id) {
+                alert('⚠️ Veuillez entrer un ID de carrousel');
+                return;
+            }
+
+            showLoading('getResponse');
+
+            try {
+                const response = await fetch(
+                    `${getBaseUrl()}/carousels/${id}`,
+                    { headers: getHeaders() }
+                );
+
+                const data = await response.json();
+                showResponse('getResponse', data, response.status);
+            } catch (error) {
+                showResponse('getResponse', { error: error.message }, 500);
+            }
+        }
+
+        async function deleteCarousel() {
+            const id = document.getElementById('deleteId').value;
+
+            if (!id) {
+                alert('⚠️ Veuillez entrer un ID de carrousel');
+                return;
+            }
+
+            if (!confirm('⚠️ Êtes-vous sûr de vouloir supprimer ce carrousel ?')) {
+                return;
+            }
+
+            showLoading('deleteResponse');
+
+            try {
+                const response = await fetch(
+                    `${getBaseUrl()}/carousels/${id}`,
+                    {
+                        method: 'DELETE',
+                        headers: getHeaders()
+                    }
+                );
+
+                const data = await response.json();
+                showResponse('deleteResponse', data, response.status);
+            } catch (error) {
+                showResponse('deleteResponse', { error: error.message }, 500);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,388 @@
+{
+  "info": {
+    "name": "Revolution Carousel API",
+    "description": "Collection Postman pour l'API Revolution - Génération de carrousels Instagram/TikTok",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "X-API-Key",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{API_KEY}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "{{SITE_URL}}/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "SITE_URL",
+      "value": "https://your-domain.vercel.app",
+      "type": "string",
+      "description": "Your Vercel deployment URL (or http://localhost:3000 for local)"
+    },
+    {
+      "key": "API_KEY",
+      "value": "sk_live_YOUR_KEY_HERE",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Carousels",
+      "item": [
+        {
+          "name": "Generate Carousel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has carousel ID\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.environment.set(\"CAROUSEL_ID\", jsonData.id);",
+                  "});",
+                  "",
+                  "pm.test(\"Carousel has slides\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.slides).to.be.an('array');",
+                  "    pm.expect(jsonData.slides.length).to.be.at.least(5);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"5 astuces pour mieux dormir\",\n  \"slideCount\": 7\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/carousels/generate",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels", "generate"]
+            },
+            "description": "Génère un nouveau carrousel avec slides et images"
+          },
+          "response": [
+            {
+              "name": "Success Example",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"topic\": \"5 tips fitness\",\n  \"slideCount\": 7\n}"
+                },
+                "url": {
+                  "raw": "{{BASE_URL}}/carousels/generate",
+                  "host": ["{{BASE_URL}}"],
+                  "path": ["carousels", "generate"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"clxxx789\",\n  \"topic\": \"5 tips fitness\",\n  \"status\": \"completed\",\n  \"slides\": [\n    {\n      \"index\": 1,\n      \"content\": \"Tip #1: Progressive overload\",\n      \"imageUrl\": \"https://storage.supabase.co/...\"\n    }\n  ],\n  \"description\": \"🏋️ Les 5 tips...\",\n  \"createdAt\": \"2024-01-15T10:30:00.000Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "List Carousels",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has data array\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test(\"Response has pagination\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('pagination');",
+                  "    pm.expect(jsonData.pagination).to.have.property('total');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/carousels?limit=20&offset=0&status=all",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Nombre de résultats (1-100)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Position de départ (pagination)"
+                },
+                {
+                  "key": "status",
+                  "value": "all",
+                  "description": "draft | published | all"
+                }
+              ]
+            },
+            "description": "Liste tous les carrousels avec pagination"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Carousel by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has carousel data\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('topic');",
+                  "    pm.expect(jsonData).to.have.property('slides');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/carousels/{{CAROUSEL_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels", "{{CAROUSEL_ID}}"]
+            },
+            "description": "Récupère un carrousel spécifique par son ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Carousel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has success message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/carousels/{{CAROUSEL_ID}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels", "{{CAROUSEL_ID}}"]
+            },
+            "description": "Supprime définitivement un carrousel"
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints pour gérer les carrousels"
+    },
+    {
+      "name": "Authentication Tests",
+      "item": [
+        {
+          "name": "Test Invalid API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test(\"Error message is correct\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('error');",
+                  "    pm.expect(jsonData.code).to.eql('UNAUTHORIZED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "apikey",
+              "apikey": [
+                {
+                  "key": "key",
+                  "value": "X-API-Key",
+                  "type": "string"
+                },
+                {
+                  "key": "value",
+                  "value": "sk_live_invalid_key",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/carousels",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels"]
+            },
+            "description": "Test avec une clé API invalide (doit retourner 401)"
+          },
+          "response": []
+        },
+        {
+          "name": "Test Missing API Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/carousels",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels"]
+            },
+            "description": "Test sans clé API (doit retourner 401)"
+          },
+          "response": []
+        }
+      ],
+      "description": "Tests d'authentification et sécurité"
+    },
+    {
+      "name": "Rate Limiting Tests",
+      "item": [
+        {
+          "name": "Test Rate Limit (Run 101 times)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var iteration = pm.variables.get(\"iteration\") || 0;",
+                  "iteration++;",
+                  "pm.variables.set(\"iteration\", iteration);",
+                  "",
+                  "if (iteration <= 100) {",
+                  "    pm.test(\"Request \" + iteration + \" - Status 200\", function () {",
+                  "        pm.response.to.have.status(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test(\"Request \" + iteration + \" - Status 429 (Rate Limited)\", function () {",
+                  "        pm.response.to.have.status(429);",
+                  "    });",
+                  "    pm.test(\"Has resetAt timestamp\", function () {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData).to.have.property('resetAt');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/carousels?limit=1",
+              "host": ["{{BASE_URL}}"],
+              "path": ["carousels"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Lancez cette requête 101 fois pour tester le rate limiting"
+          },
+          "response": []
+        }
+      ],
+      "description": "Tests de rate limiting (100 req/jour)"
+    }
+  ]
+}

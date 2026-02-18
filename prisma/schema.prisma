@@ -1,0 +1,490 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+// ============= USER & AUTH =============
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  password        String?
+  emailVerified   DateTime?
+  image           String?
+  anthropicApiKey String?
+  apifyApiKey     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  profiles        Profile[]
+  folders         Folder[]
+  activeProfileId String?
+  images          Image[]
+  collections     Collection[]
+  posts           Post[]
+  followerSnapshots FollowerSnapshot[]
+  apiKeys         ApiKey[]
+  carouselJobs    CarouselJob[]
+}
+
+// ============= FOLDERS (Sidebar Organization) =============
+
+model Folder {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String?
+  icon      String?
+  order     Int       @default(0)
+  profiles  Profile[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+// ============= PROFILE (Multi-Platform) =============
+
+model Profile {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Folder organization
+  folderId       String?
+  folder         Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  // Platform info
+  platform       String   @default("tiktok") // tiktok, instagram, youtube, newsletter, blog, twitter, pinterest
+  displayName    String?
+  username       String?  // @username for social platforms
+  avatarUrl      String?
+  bio            String?  
+
+  // Onboarding data
+  niche          String?  // Fitness, Business, Lifestyle, etc.
+  persona        String?   // Target audience description
+  targetAudience String?  
+  goals          String?   // JSON array of goals
+  leadMagnet     String?   // [NEW]
+  hashtags       String?   // [NEW]
+
+  // Metrics
+  followersCount Int      @default(0)
+  likesCount     Int      @default(0)
+  videoCount     Int      @default(0)
+
+  // Sync Configuration
+  syncPostLimit  Int      @default(50)  // Number of posts to sync (sorted by views)
+  lastSyncAt     DateTime?              // Last successful TikTok sync timestamp
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  posts              Post[]
+  competitors        Competitor[]
+  contentAnalyses    ContentAnalysis[]
+  followerSnapshots  FollowerSnapshot[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  insights           ProfileInsights?  // NEW: Cached learning insights
+
+  @@index([userId])
+  @@index([platform])
+}
+
+// ============= LEARNING SYSTEM =============
+model ProfileInsights {
+  id                String   @id @default(cuid())
+  profileId         String   @unique
+  profile           Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Insights JSON structure (patterns, strong/weak points, persona refinement)
+  insights          String   // JSON containing all computed insights
+  
+  // Metadata
+  basedOnPostsCount Int      @default(0)  // Number of analyzed posts used
+  lastUpdatedAt     DateTime @default(now())
+  createdAt         DateTime @default(now())
+  
+  @@index([profileId])
+  @@index([lastUpdatedAt])
+}
+
+// ============= COMPETITOR TRACKING =============
+
+model Competitor {
+  id              String   @id @default(cuid())
+  profileId       String
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // Competitor info
+  tiktokUsername  String
+  displayName     String?
+  avatarUrl       String?
+  bio             String?  
+  niche           String?
+
+  // Metrics
+  followersCount  Int      @default(0)
+  likesCount      Int      @default(0)
+  videoCount      Int      @default(0)
+
+  isActive        Boolean  @default(true)
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  posts           CompetitorPost[]
+  analyses        CompetitorAnalysis[]
+
+  @@unique([profileId, tiktokUsername])
+  @@index([profileId])
+}
+
+model CompetitorPost {
+  id           String     @id @default(cuid())
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  // TikTok identifiers
+  tiktokId     String     @unique
+  webVideoUrl  String?
+  coverUrl     String?
+
+  // Content
+  description  String?    
+  hashtags     String?     // JSON array
+  musicName    String?
+  musicAuthor  String?
+  duration     Int?       // seconds
+  slideCount   Int?
+  carouselImages String?  // JSON array of image URLs
+
+  // Metrics
+  views        Int        @default(0)
+  likes        Int        @default(0)
+  comments     Int        @default(0)
+  shares       Int        @default(0)
+  saves        Int        @default(0)
+
+  // Calculated
+  engagementRate Float?
+
+  publishedAt  DateTime
+  scrapedAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  analysis     CompetitorAnalysis?
+
+  @@index([competitorId])
+  @@index([publishedAt])
+  @@index([views])
+}
+
+// ============= CONTENT ANALYSIS (IFS Algorithm) =============
+
+model ContentAnalysis {
+  id        String @id @default(cuid())
+  postId    String @unique
+  post      Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // === QUALITY SCORE (QS) - 100 points total ===
+
+  // Hook (25 pts)
+  qsHookText   Float @default(0)
+  qsHookVerbal Float @default(0)
+  qsHookVisual Float @default(0)
+  qsHookTotal  Float @default(0)
+
+  // Body (20 pts)
+  qsBodyValue     Float @default(0)
+  qsBodyStructure Float @default(0)
+  qsBodyRhythm    Float @default(0)
+  qsBodyStory     Float @default(0)
+  qsBodyTotal     Float @default(0)
+
+  // CTA (10 pts)
+  qsCtaClarity    Float @default(0)
+  qsCtaTiming     Float @default(0)
+  qsCtaUrgency    Float @default(0)
+  qsCtaVisibility Float @default(0)
+  qsCtaTotal      Float @default(0)
+
+  // Visual (15 pts)
+  qsVisualQuality    Float @default(0)
+  qsVisualEngagement Float @default(0)
+  qsVisualBrand      Float @default(0)
+  qsVisualTotal      Float @default(0)
+
+  // Music (10 pts)
+  qsMusicTrend   Float @default(0)
+  qsMusicFit     Float @default(0)
+  qsMusicQuality Float @default(0)
+  qsMusicTotal   Float @default(0)
+
+  // Timing (10 pts)
+  qsTimingOptimal Float @default(0)
+  qsTimingDay     Float @default(0)
+  qsTimingContext Float @default(0)
+  qsTimingTotal   Float @default(0)
+
+  // Persona (10 pts)
+  qsPersonaFit   Float @default(0)
+  qsNicheFit     Float @default(0)
+  qsPersonaTotal Float @default(0)
+
+  // === SCORES ===
+  qualityScore     Float @default(0) // QS Total /100
+  performanceScore Float @default(0) // PS /100
+  intelligentScore Float @default(0) // IFS = QS*0.6 + PS*0.4
+
+  analyzedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([intelligentScore])
+}
+
+model CompetitorAnalysis {
+  id           String         @id @default(cuid())
+  postId       String         @unique
+  post         CompetitorPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  competitorId String
+  competitor   Competitor     @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  // Same scoring structure as ContentAnalysis
+  qsHookTotal     Float @default(0)
+  qsBodyTotal     Float @default(0)
+  qsCtaTotal      Float @default(0)
+  qsVisualTotal   Float @default(0)
+  qsMusicTotal    Float @default(0)
+  qsTimingTotal   Float @default(0)
+  qsPersonaTotal  Float @default(0)
+
+  qualityScore     Float @default(0)
+  performanceScore Float @default(0)
+  intelligentScore Float @default(0)
+
+  analyzedAt DateTime @default(now())
+
+  @@index([competitorId])
+  @@index([intelligentScore])
+}
+
+// ============= POSTS & CONTENT =============
+
+model Post {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId  String?
+  profile    Profile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  // TikTok data (if imported)
+  tiktokId   String?  // ✅ Removed @unique - now allows multiple users to scrape same TikTok account
+  coverUrl   String?
+  videoUrl   String?
+  carouselImages String? // JSON array of image URLs from TikTok slideshow
+
+  // Content
+  platform   String   @default("tiktok")
+  hookText   String   
+  title      String?  
+  description String? 
+  slideCount Int?
+  slides     String?   // JSON
+
+  origin     String   @default("generated") // generated, imported, scraped
+  status     String   @default("draft")     // draft, created, published, rejected, idea, scheduled
+  publishedAt DateTime?
+
+  // Scheduling
+  scheduledAt DateTime?  // When this post should be published (null = manual publish)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  metrics      Metrics?
+  analysis     ContentAnalysis?
+  carouselJob  CarouselJob?  @relation(fields: [carouselJobId], references: [id])
+  carouselJobId String?
+
+  @@index([profileId])
+  @@index([publishedAt])
+  @@index([createdAt])                        // Fast sorting by creation date
+  @@index([userId, status])                   // Fast filtering by user + status
+  @@index([userId, origin])                   // Fast filtering by user + origin
+  @@index([status, scheduledAt])              // Fast scheduled post lookup
+  @@unique([userId, tiktokId])                // Unique constraint per user
+}
+
+model Metrics {
+  id        String   @id @default(cuid())
+  postId    String   @unique
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  views     Int      @default(0)
+  likes     Int      @default(0)
+  shares    Int      @default(0)
+  comments  Int      @default(0)
+  saves     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@index([views])  // ✅ Fast viral post lookups
+}
+
+// ============= ANALYTICS =============
+
+model FollowerSnapshot {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId String?
+  profile   Profile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  count     Int
+  createdAt DateTime @default(now())
+
+  @@index([profileId])
+}
+
+model AnalyticsSnapshot {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+  metric    String
+  value     Float
+  profileId String?
+  profile   Profile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, date, metric])
+  @@index([profileId])
+  @@index([date])
+}
+
+// ============= IMAGES & COLLECTIONS =============
+
+model Image {
+  id              String       @id @default(cuid())
+  humanId         String       @unique
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storageUrl      String
+  hash            String?
+  descriptionLong String
+  keywords        String
+  mood            String?
+  style           String?
+  colors          String?
+  filename        String?
+  collections     Collection[]
+  createdAt       DateTime     @default(now())
+
+  @@index([userId])  // ✅ Fast image listing per user
+}
+
+model Collection {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images    Image[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])  // ✅ Fast collection listing per user
+}
+
+// ============= API KEYS =============
+
+model ApiKey {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Key identification (never store plaintext)
+  keyHash       String   @unique  // bcrypt hash of the full key
+  keyPrefix     String              // First 12 chars for display (e.g., "sk_live_abc")
+
+  // Metadata
+  name          String              // User-friendly name
+  status        String   @default("active") // active | revoked
+
+  // Rate limiting
+  requestCount  Int      @default(0)
+  dailyLimit    Int      @default(100)
+  lastResetAt   DateTime @default(now())
+
+  // Lifecycle
+  lastUsedAt    DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  requests      ApiRequest[]
+
+  @@index([userId])
+  @@index([keyPrefix])
+  @@index([status])
+}
+
+model ApiRequest {
+  id          String   @id @default(cuid())
+  apiKeyId    String
+  apiKey      ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  // Request details
+  method      String
+  endpoint    String
+  statusCode  Int
+  durationMs  Int
+
+  // Context
+  ipAddress   String?
+  userAgent   String?
+  errorMessage String?
+
+  createdAt   DateTime @default(now())
+
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@index([endpoint])
+}
+
+model CarouselJob {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Job details
+  topic       String
+  slideCount  Int      @default(7)
+  status      String   @default("pending") // pending | processing | completed | failed
+
+  // Results
+  posts       Post[]
+  errorMessage String?
+
+  // Metadata
+  collectionId String?
+  profileId    String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
