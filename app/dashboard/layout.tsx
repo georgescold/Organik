@@ -1,13 +1,30 @@
+import { FloatingStats } from "@/components/ui/floating-stats";
 import { OnboardingModal } from "@/components/onboarding/onboarding-modal";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/queries";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { LogOut, User, Settings } from "lucide-react";
+import { ProfileSwitcher } from "@/components/profile/profile-switcher";
 import { ProfileThemeAdapter } from "@/components/profile/profile-theme-adapter";
+import { signOut } from "@/lib/auth";
 import { Montserrat } from "next/font/google";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ForceSignOut } from "@/components/auth/force-signout";
 import { RocketIcon } from '@/components/ui/rocket-icon';
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "700", "900"] });
+
+async function SignOutButton() {
+    'use server';
+    await signOut();
+}
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
     const user = await getCurrentUser();
@@ -15,21 +32,47 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
     const profiles = user?.profiles || [];
 
-    // Clean Header
+    // Mobile-optimized Header with Space Theme
     const Header = () => (
-        <header className={`sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-white/10 bg-black/95 backdrop-blur-sm px-3 sm:px-4 md:px-8 ${montserrat.className}`}>
+        <header className={`sticky top-0 z-30 flex h-14 md:h-20 items-center justify-between border-b border-white/10 bg-black px-2 sm:px-3 md:px-8 overflow-hidden ${montserrat.className}`}>
 
-            <Link href="/dashboard" className="relative z-10 flex items-center gap-2 md:gap-3 group">
-                <RocketIcon
-                    className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 group-hover:scale-105 transition-transform duration-300"
+            {/* Space Background Layer (Masked to Header) — Simplified */}
+            <div className="absolute inset-0 z-0 pointer-events-none">
+                {/* Subtle noise texture */}
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 mix-blend-overlay"></div>
+                {/* Stars - White (single layer, reduced density) */}
+                <div className="absolute inset-0 animate-[fly_25s_linear_infinite] hidden md:block"
+                    style={{
+                        backgroundImage: 'radial-gradient(1px 1px at 5px 5px, white 100%, transparent 100%), radial-gradient(0.5px 0.5px at 80px 40px, rgba(255,255,255,0.3) 100%, transparent 100%)',
+                        backgroundSize: '200px 200px'
+                    }}
                 />
-                <span className="text-lg sm:text-xl md:text-2xl font-black tracking-tight text-white leading-none select-none">
-                    Organik
-                </span>
+                {/* Floating Stats Layer */}
+                <FloatingStats />
+
+                {/* Single subtle comet — less visual noise */}
+                <div className="absolute top-0 right-[-10%] w-[80px] h-[1px] bg-gradient-to-r from-transparent via-primary/60 to-transparent animate-[comet-depth_14s_linear_infinite] hidden md:block" />
+            </div>
+
+            <Link href="/dashboard" className="relative z-10 flex items-center space-x-2 md:space-x-4 group">
+                {/* Mini Rocket - Now using the unified animated icon */}
+                {/* "Violent" Fire (isLaunching=true) but NO Smoke (showSmoke=false) as requested */}
+                <RocketIcon
+                    isLaunching={true}
+                    showSmoke={false}
+                    className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 mt-2 md:mt-4 group-hover:scale-105 transition-transform duration-300"
+                />
+
+                {/* Glitch Logo */}
+                <div className="relative">
+                    <span className="block text-lg sm:text-xl md:text-3xl font-black tracking-tighter text-white leading-none select-none relative z-10 mix-blend-screen">Organik</span>
+                    <span className="absolute top-0 left-0 text-lg sm:text-xl md:text-3xl font-black tracking-tighter text-[#25F4EE] leading-none select-none -translate-x-[1px] -translate-y-[1px] z-0 opacity-80 animate-glitch-cyan hidden sm:block">Organik</span>
+                    <span className="absolute top-0 left-0 text-lg sm:text-xl md:text-3xl font-black tracking-tighter text-[#FE2C55] leading-none select-none translate-x-[1px] translate-y-[1px] z-0 opacity-80 animate-glitch-red hidden sm:block">Organik</span>
+                </div>
             </Link>
 
             {/* Icons moved to DashboardTabs in page.tsx */}
-        </header>
+        </header >
     );
 
     if (profiles.length === 0) {
