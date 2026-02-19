@@ -20,6 +20,10 @@ import { TwemojiProvider } from "@/components/twemoji-provider";
 export const metadata: Metadata = {
   title: "Organik | TikTok Content Manager",
   description: "Créez, gérez et optimisez votre contenu TikTok.",
+  icons: {
+    icon: '/icon.svg',
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export const viewport = {
