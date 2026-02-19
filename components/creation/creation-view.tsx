@@ -1382,6 +1382,22 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         return len > 60 ? 12 : len > 30 ? 13 : 15;
                     };
 
+                    // Render text with emojis stripped of text-shadow
+                    const emojiRx = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/gu;
+                    const renderCleanEmojis = (text: string) => {
+                        const parts = text.split(emojiRx).filter(Boolean);
+                        emojiRx.lastIndex = 0;
+                        if (parts.length <= 1 && !emojiRx.test(text)) return text;
+                        emojiRx.lastIndex = 0;
+                        return parts.map((part, pi) => {
+                            emojiRx.lastIndex = 0;
+                            if (emojiRx.test(part)) {
+                                return <span key={pi} style={{ textShadow: 'none' }}>{part}</span>;
+                            }
+                            return <span key={pi}>{part}</span>;
+                        });
+                    };
+
                     return (
                         <Card key={`${slide.slide_number}-${index}`} className="overflow-hidden border-border/50 bg-card/30 flex flex-col group/card relative">
                             {/* Delete Button */}
@@ -1461,7 +1477,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                                     whiteSpace: 'pre-wrap',
                                                 }}
                                             >
-                                                {paragraph}
+                                                {renderCleanEmojis(paragraph)}
                                             </div>
                                         );
                                     }) : (

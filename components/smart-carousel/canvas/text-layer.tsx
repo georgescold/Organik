@@ -54,6 +54,23 @@ export function TextLayerContent({
     const maxWidth = layer.maxWidth || 320;
     const textMode = layer.textMode || 'outline';
 
+    // Helper: split text into emoji and non-emoji segments
+    // Emojis will be rendered without text-shadow to avoid ugly black outlines
+    const emojiRegex = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/gu;
+    const renderContentWithCleanEmojis = (text: string) => {
+        const parts = text.split(emojiRegex).filter(Boolean);
+        if (parts.length <= 1 && !emojiRegex.test(text)) return text;
+        // Reset regex lastIndex
+        emojiRegex.lastIndex = 0;
+        return parts.map((part, i) => {
+            emojiRegex.lastIndex = 0;
+            if (emojiRegex.test(part)) {
+                return <span key={i} style={{ textShadow: 'none' }}>{part}</span>;
+            }
+            return <span key={i}>{part}</span>;
+        });
+    };
+
     // TikTok-style text rendering based on mode
     const hasOutline = textMode === 'outline' && layer.outlineWidth && layer.outlineWidth > 0;
     const outlineColor = layer.outlineColor || '#000000';
@@ -190,7 +207,7 @@ export function TextLayerContent({
                         lineHeight: 1.8,
                     }}
                 >
-                    {layer.content || 'Double-cliquez pour modifier'}
+                    {renderContentWithCleanEmojis(layer.content || 'Double-cliquez pour modifier')}
                 </span>
             </div>
         );
@@ -233,7 +250,7 @@ export function TextLayerContent({
                             lineHeight: 1.7,
                         }}
                     >
-                        {line}
+                        {renderContentWithCleanEmojis(line)}
                     </span>
                 ))}
             </div>
@@ -249,7 +266,7 @@ export function TextLayerContent({
                 onStartEdit();
             }}
         >
-            {layer.content || 'Double-cliquez pour modifier'}
+            {renderContentWithCleanEmojis(layer.content || 'Double-cliquez pour modifier')}
         </div>
     );
 }

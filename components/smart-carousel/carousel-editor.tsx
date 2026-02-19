@@ -134,7 +134,9 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
 
         const updateScale = () => {
             const containerW = container.clientWidth - 16; // padding
-            const containerH = container.clientHeight - 16;
+            // On mobile, account for the fixed toolbar overlay (100px bottom padding)
+            const isMobile = window.innerWidth < 768;
+            const containerH = container.clientHeight - (isMobile ? 100 : 16);
             const scale = Math.min(containerW / 360, containerH / 640, 1);
             setCanvasScale(scale);
         };
@@ -535,7 +537,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 {/* Main Canvas */}
                 <div
                     ref={canvasContainerRef}
-                    className="flex-1 flex items-center justify-center bg-zinc-900 p-2 sm:p-4 md:p-6 min-h-0 relative"
+                    className="flex-1 flex items-center justify-center bg-zinc-900 p-2 sm:p-4 md:p-6 pb-[100px] md:pb-6 min-h-0 relative overflow-auto"
                     onClick={() => {
                         setSelectedLayerId(null);
                         setEditingLayerId(null);
