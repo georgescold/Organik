@@ -295,7 +295,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
             const result = await generateHooks();
             if (result.error) toast.error(result.error);
             else if (result.hooks) {
-                setHooks(result.hooks);
+                // Assign unique IDs to each hook (API returns hooks without id)
+                setHooks(result.hooks.map(h => ({ ...h, id: h.id || crypto.randomUUID() })));
                 setEditingId(null);
             }
         });
@@ -329,7 +330,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
             const result = await generateVariations(hook);
             if (result.error) toast.error(result.error);
             else if (result.hooks) {
-                setHooks(result.hooks); // Replace all hooks with the variations
+                // Assign unique IDs to each variation (API returns hooks without id)
+                setHooks(result.hooks.map(h => ({ ...h, id: h.id || crypto.randomUUID() })));
                 toast.success("Variations générées !");
             }
             setReplacingIndex(null);
@@ -730,13 +732,13 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
                             <div className="grid md:grid-cols-3 gap-6">
                                 {hooks.map((h, i) => (
-                                    <Card key={i}
+                                    <Card key={h.id || i}
                                         onClick={(e) => {
                                             // Don't toggle if click came from a button inside
                                             if ((e.target as HTMLElement).closest('button')) return;
                                             setSelectedHook(selectedHook?.id === h.id ? null : h);
                                         }}
-                                        className={`cursor-pointer transition-all group bg-card/40 backdrop-blur relative ${replacingIndex === i ? 'opacity-50 pointer-events-none' : ''} ${selectedHook?.id === h.id ? 'border-primary ring-2 ring-primary/30 scale-[1.02]' : selectedHook ? 'opacity-70 md:opacity-50 hover:opacity-80' : 'hover:border-primary hover:scale-105'}`}
+                                        className={`cursor-pointer transition-all group bg-card backdrop-blur relative ${replacingIndex === i ? 'opacity-50 pointer-events-none' : ''} ${selectedHook?.id === h.id ? 'border-primary ring-2 ring-primary/30 scale-[1.02]' : selectedHook ? 'opacity-80 hover:opacity-100' : 'hover:border-primary hover:scale-105'}`}
                                     >
                                         {/* Reject Button (Red Cross) */}
                                         <Button
