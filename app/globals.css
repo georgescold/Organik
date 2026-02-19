@@ -406,6 +406,26 @@ button:not(:disabled):active,
   box-shadow: 0 0 0 1px hsl(348 83% 47% / 0.1);
 }
 
+/* Scrollbar — light themed */
+.white *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.white *::-webkit-scrollbar-track {
+  background: hsl(225 10% 95%);
+  border-radius: 4px;
+}
+.white *::-webkit-scrollbar-thumb {
+  background: hsl(225 10% 78%);
+  border-radius: 4px;
+}
+.white *::-webkit-scrollbar-thumb:hover {
+  background: hsl(225 10% 65%);
+}
+.white * {
+  scrollbar-color: hsl(225 10% 78%) hsl(225 10% 95%);
+}
+
 /* ═══════════════════════════════════════
    BEIGE THEME — Warm depth & shadows
    ═══════════════════════════════════════ */
@@ -445,6 +465,26 @@ button:not(:disabled):active,
     hsl(348 100% 50% / 0.15) 80%,
     transparent 100%
   );
+}
+
+/* Scrollbar — warm themed */
+.beige *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.beige *::-webkit-scrollbar-track {
+  background: hsl(35 15% 90%);
+  border-radius: 4px;
+}
+.beige *::-webkit-scrollbar-thumb {
+  background: hsl(30 12% 72%);
+  border-radius: 4px;
+}
+.beige *::-webkit-scrollbar-thumb:hover {
+  background: hsl(30 12% 58%);
+}
+.beige * {
+  scrollbar-color: hsl(30 12% 72%) hsl(35 15% 90%);
 }
 
 /* ═══════════════════════════════════════
