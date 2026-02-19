@@ -296,7 +296,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
             if (result.error) toast.error(result.error);
             else if (result.hooks) {
                 // Assign unique IDs to each hook (API returns hooks without id)
-                setHooks(result.hooks.map(h => ({ ...h, id: h.id || crypto.randomUUID() })));
+                setHooks(result.hooks.map((h: HookProposal) => ({ ...h, id: h.id || crypto.randomUUID() })));
                 setEditingId(null);
             }
         });
@@ -331,7 +331,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
             if (result.error) toast.error(result.error);
             else if (result.hooks) {
                 // Assign unique IDs to each variation (API returns hooks without id)
-                setHooks(result.hooks.map(h => ({ ...h, id: h.id || crypto.randomUUID() })));
+                setHooks(result.hooks.map((h: HookProposal) => ({ ...h, id: h.id || crypto.randomUUID() })));
                 toast.success("Variations générées !");
             }
             setReplacingIndex(null);
