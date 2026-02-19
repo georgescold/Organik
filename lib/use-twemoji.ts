@@ -15,7 +15,7 @@ import { useEffect, useCallback, useRef } from 'react';
 let twemojiLoaded = false;
 let twemojiLoading: Promise<void> | null = null;
 
-function loadTwemojiScript(): Promise<void> {
+export function loadTwemojiScript(): Promise<void> {
     if (twemojiLoaded && (window as any).twemoji) return Promise.resolve();
     if (twemojiLoading) return twemojiLoading;
 

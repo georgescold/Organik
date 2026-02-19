@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { generateHooks, generateCarousel, saveCarousel, getDrafts, updatePostContent, saveHookAsIdea, getSavedIdeas, deletePost, rejectHook, generateReplacementHook, generateVariations, getPost, scoreCarouselBeforePublish, improveCarouselFromScore, HookProposal, Slide } from '@/server/actions/creation-actions';
+import { parseTwemoji, loadTwemojiScript } from '@/lib/use-twemoji';
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
@@ -438,6 +439,9 @@ export function CreationView({ initialPost }: CreationViewProps) {
         const { saveAs } = await import('file-saver');
         const html2canvas = (await import('html2canvas')).default;
 
+        // Ensure Twemoji is loaded for emoji rendering in exported slides
+        try { await loadTwemojiScript(); } catch (e) { console.warn('Twemoji not available for export'); }
+
         try {
             for (const slide of slides) {
                 try {
@@ -495,10 +499,34 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         shadows.push('0 3px 8px rgba(0,0,0,0.6)');
 
                         const textDiv = document.createElement('div');
-                        textDiv.textContent = paragraph;
+                        // Use innerHTML to preserve emoji characters for Twemoji parsing
+                        textDiv.innerHTML = paragraph.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         textDiv.style.cssText = `position:absolute;left:40px;right:40px;top:${topOffset};transform:translateY(-50%);text-align:center;color:#fff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1.5;text-shadow:${shadows.join(',')};word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;`;
                         container.appendChild(textDiv);
+
+                        // Parse emojis with Twemoji to render as SVG (Apple-style)
+                        parseTwemoji(textDiv);
                     });
+
+                    // Style Twemoji images inline for html2canvas and wait for them to load
+                    const emojiImgs = container.querySelectorAll('img.emoji');
+                    emojiImgs.forEach((img) => {
+                        const el = img as HTMLElement;
+                        el.style.cssText = 'height:1em;width:1em;margin:0 .05em 0 .1em;vertical-align:-0.1em;display:inline;';
+                    });
+                    // Wait for all emoji SVGs to be fully loaded
+                    if (emojiImgs.length > 0) {
+                        await Promise.all(
+                            Array.from(emojiImgs).map((img) =>
+                                new Promise<void>((resolve) => {
+                                    const imgEl = img as HTMLImageElement;
+                                    if (imgEl.complete) return resolve();
+                                    imgEl.onload = () => resolve();
+                                    imgEl.onerror = () => resolve();
+                                })
+                            )
+                        );
+                    }
 
                     // Render with html2canvas
                     const canvas = await html2canvas(container, {
@@ -565,6 +593,11 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 if (res.error) {
                     toast.error(res.error);
                     return;
+                }
+                // If this carousel was created from a saved idea, delete the idea
+                const matchedIdea = savedIdeas.find(idea => idea.id === selectedHook.id);
+                if (matchedIdea) {
+                    await deletePost(matchedIdea.id);
                 }
                 toast.success(asDraft ? "Brouillon sauvegardé !" : "Carrousel sauvegardé !");
                 if (asDraft) {
