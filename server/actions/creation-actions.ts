@@ -1780,33 +1780,34 @@ export async function scoreCarouselBeforePublish(hookText: string, slides: Slide
             max_tokens: 1024,
             messages: [{
                 role: "user",
-                content: `You are a TikTok performance analyst. Score this carousel BEFORE publication.
-IMPORTANT: In ALL text outputs (improvements, strengths, formattingIssues), NEVER use em-dashes (—) or en-dashes (–). Use only hyphens (-), commas, or periods.
+                content: `Tu es un analyste de performance TikTok. Évalue ce carrousel AVANT publication.
+IMPORTANT: Dans TOUS les textes (improvements, strengths, formattingIssues), n'utilise JAMAIS de tirets longs (—) ou moyens (–). Utilise uniquement des tirets courts (-), des virgules ou des points.
+LANGUE: Réponds UNIQUEMENT en FRANÇAIS.
 
-HISTORICAL TOP PERFORMERS:
+HISTORIQUE DES TOP PERFORMERS:
 ${topPostsContext}
 
-Average views for top posts: ${avgViews.toLocaleString()}
+Vues moyennes des top posts: ${avgViews.toLocaleString()}
 ${insightsContext}
 
-CAROUSEL TO SCORE:
+CARROUSEL À ÉVALUER:
 Hook: "${hookText}"
 ${allSlideText}
 
-Score this carousel on 6 criteria (each /20, total /120 then normalized to /100):
-1. **Hook Power** (/20): Will it stop the scroll? Does it match proven viral patterns?
-2. **Retention Flow** (/20): Do cliffhangers and open loops force swiping?
-3. **Text Quality** (/20): Human, authentic, not AI-sounding? Balanced across slides?
-4. **Value Density** (/20): Does the audience learn something actionable?
-5. **CTA Strength** (/20): Will it convert followers/engagement?
-6. **Slide Formatting** (/20): Check EACH slide text for readability on a TikTok image:
-   - Text too long: a slide with more than 30 words may be hard to read on a TikTok image (minor issue for 25-30 words, major for 30+).
-   - Text overlap risk: if two consecutive slides have very similar text length AND positioning keywords, they may overlap visually.
-   - Empty or near-empty slides: any slide with fewer than 3 words is wasted space.
-   - Broken sentences: text that starts mid-sentence without context (not a deliberate cliffhanger).
-   - Orphan numbering: a number like "2." appearing ALONE at the end of a slide (separated from its content) is a formatting error. But numbered lists where the number starts a slide ("1. He always..." ) are PERFECTLY FINE if the hook implies a list format (e.g. "Les 5 signes que...").
+Évalue ce carrousel sur 6 critères (chaque /20, total /120 puis normalisé à /100):
+1. **hookPower** (/20): Est-ce qu'il stoppe le scroll ? Correspond-il aux patterns viraux prouvés ?
+2. **retentionFlow** (/20): Les cliffhangers et boucles ouvertes forcent-ils le swipe ?
+3. **textQuality** (/20): Humain, authentique, pas IA ? Équilibré entre les slides ?
+4. **valueDensity** (/20): L'audience apprend-elle quelque chose d'actionnable ?
+5. **ctaStrength** (/20): Va-t-il convertir en followers/engagement ?
+6. **slideFormatting** (/20): Vérifie CHAQUE slide pour la lisibilité sur une image TikTok:
+   - Texte trop long: une slide avec plus de 30 mots peut être difficile à lire (mineur pour 25-30 mots, majeur pour 30+).
+   - Risque de chevauchement: si deux slides consécutives ont un texte de longueur très similaire ET des mots-clés de positionnement similaires.
+   - Slides vides ou quasi-vides: toute slide avec moins de 3 mots est de l'espace gâché.
+   - Phrases coupées: texte qui commence en milieu de phrase sans contexte (pas un cliffhanger délibéré).
+   - Numérotation orpheline: un numéro comme "2." apparaissant SEUL à la fin d'une slide est une erreur de formatage. Mais les listes numérotées où le numéro commence une slide ("1. Il fait toujours...") sont PARFAITEMENT OK si le hook implique un format liste (ex: "Les 5 signes que...").
 
-Return JSON ONLY:
+Retourne du JSON UNIQUEMENT:
 {
     "scores": {
         "hookPower": 16,
@@ -1819,9 +1820,9 @@ Return JSON ONLY:
     "total": 74,
     "prediction": "above_average" | "average" | "below_average",
     "estimatedViews": "8000-12000",
-    "improvements": ["suggestion 1", "suggestion 2"],
-    "formattingIssues": ["Slide 3: contains parasitic number '2.' in text", "Slide 5: text too long (18 words)"],
-    "strengths": ["strength 1"]
+    "improvements": ["suggestion en français 1", "suggestion en français 2"],
+    "formattingIssues": ["Slide 3: contient un numéro parasite '2.' dans le texte", "Slide 5: texte trop long (18 mots)"],
+    "strengths": ["point fort en français 1"]
 }`
             }]
         }));

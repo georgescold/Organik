@@ -68,12 +68,12 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 const textLength = paragraph.length;
                 let autoFontSize: number;
                 if (idx === 0 && pIdx === 0) {
-                    autoFontSize = textLength > 80 ? 20 : textLength > 50 ? 24 : 28;
+                    autoFontSize = textLength > 80 ? 24 : textLength > 50 ? 28 : 34;
                 } else if (pIdx === 0) {
-                    autoFontSize = textLength > 80 ? 18 : textLength > 40 ? 20 : 24;
+                    autoFontSize = textLength > 80 ? 22 : textLength > 40 ? 26 : 30;
                 } else {
                     // Secondary paragraph (subtitle) — smaller
-                    autoFontSize = textLength > 60 ? 16 : textLength > 30 ? 18 : 20;
+                    autoFontSize = textLength > 60 ? 20 : textLength > 30 ? 22 : 26;
                 }
 
                 // Position: first paragraph higher, second lower
@@ -434,37 +434,103 @@ export function CreationView({ initialPost }: CreationViewProps) {
         if (!slides.length) return;
 
         let downloadedCount = 0;
-        const loadingToast = toast.loading("Téléchargement des images...");
+        const loadingToast = toast.loading("Téléchargement des slides...");
         const { saveAs } = await import('file-saver');
+        const html2canvas = (await import('html2canvas')).default;
 
         try {
-            // Download each image individually (no zip — better for mobile)
             for (const slide of slides) {
-                if (slide.image_url) {
-                    try {
-                        const response = await fetch(slide.image_url);
-                        const blob = await response.blob();
-                        const ext = blob.type.split('/')[1] || 'jpg';
-                        saveAs(blob, `slide-${slide.slide_number}.${ext}`);
-                        downloadedCount++;
-                        // Small delay between downloads to avoid browser blocking
-                        if (slides.indexOf(slide) < slides.length - 1) {
-                            await new Promise(r => setTimeout(r, 300));
-                        }
-                    } catch (err) {
-                        console.error(`Failed to download image for slide ${slide.slide_number}`, err);
+                try {
+                    // Create offscreen container at TikTok resolution (1080x1920)
+                    const container = document.createElement('div');
+                    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:1080px;height:1920px;overflow:hidden;background:#000;';
+                    document.body.appendChild(container);
+
+                    // Background image
+                    if (slide.image_url) {
+                        const img = document.createElement('img');
+                        img.crossOrigin = 'anonymous';
+                        img.src = slide.image_url;
+                        img.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;';
+                        container.appendChild(img);
+                        await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); });
                     }
+
+                    // Text overlay
+                    const fullText = slide.text || '';
+                    const isLastSlide = slide.slide_number === slides.length;
+                    const isHook = slide.slide_number === 1;
+                    const paragraphs = isLastSlide
+                        ? [fullText.trim()].filter(Boolean)
+                        : fullText.split(/\n\s*\n/).map((p: string) => p.trim()).filter(Boolean);
+                    const hasSplit = paragraphs.length > 1;
+
+                    paragraphs.forEach((paragraph: string, pIdx: number) => {
+                        const len = paragraph.length;
+                        let fontSize: number;
+                        if (isHook) { fontSize = len > 80 ? 52 : len > 50 ? 60 : 72; }
+                        else if (isLastSlide) {
+                            if (len > 250) fontSize = 34;
+                            else if (len > 180) fontSize = 38;
+                            else if (len > 120) fontSize = 44;
+                            else if (len > 80) fontSize = 48;
+                            else fontSize = 52;
+                        }
+                        else if (pIdx === 0) { fontSize = len > 80 ? 48 : len > 40 ? 52 : 60; }
+                        else { fontSize = len > 60 ? 44 : len > 30 ? 48 : 56; }
+
+                        const topOffset = hasSplit ? (pIdx === 0 ? '35%' : '62%') : '50%';
+
+                        // Generate outline shadows at export scale
+                        const outlineW = 5;
+                        const shadows: string[] = [];
+                        for (let s = 0; s < 24; s++) {
+                            const a = (2 * Math.PI * s) / 24;
+                            shadows.push(`${(Math.cos(a) * outlineW).toFixed(1)}px ${(Math.sin(a) * outlineW).toFixed(1)}px 0 #000`);
+                        }
+                        for (let s = 0; s < 16; s++) {
+                            const a = (2 * Math.PI * s) / 16;
+                            shadows.push(`${(Math.cos(a) * outlineW * 0.75).toFixed(1)}px ${(Math.sin(a) * outlineW * 0.75).toFixed(1)}px 0 #000`);
+                        }
+                        shadows.push('0 3px 8px rgba(0,0,0,0.6)');
+
+                        const textDiv = document.createElement('div');
+                        textDiv.textContent = paragraph;
+                        textDiv.style.cssText = `position:absolute;left:40px;right:40px;top:${topOffset};transform:translateY(-50%);text-align:center;color:#fff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1.5;text-shadow:${shadows.join(',')};word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;`;
+                        container.appendChild(textDiv);
+                    });
+
+                    // Render with html2canvas
+                    const canvas = await html2canvas(container, {
+                        width: 1080, height: 1920, scale: 1,
+                        useCORS: true, allowTaint: true, backgroundColor: '#000',
+                    });
+
+                    document.body.removeChild(container);
+
+                    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 1));
+                    if (blob) {
+                        saveAs(blob, `slide-${slide.slide_number}.png`);
+                        downloadedCount++;
+                    }
+
+                    // Small delay between downloads
+                    if (slide.slide_number < slides.length) {
+                        await new Promise(r => setTimeout(r, 300));
+                    }
+                } catch (err) {
+                    console.error(`Failed to export slide ${slide.slide_number}`, err);
                 }
             }
 
             if (downloadedCount === 0) {
-                toast.error("Aucune image valide trouvée.");
+                toast.error("Aucune slide exportée.");
             } else {
-                toast.success(`${downloadedCount} image${downloadedCount > 1 ? 's' : ''} téléchargée${downloadedCount > 1 ? 's' : ''} !`);
+                toast.success(`${downloadedCount} slide${downloadedCount > 1 ? 's' : ''} exportée${downloadedCount > 1 ? 's' : ''} !`);
             }
         } catch (e) {
             console.error(e);
-            toast.error("Erreur lors du téléchargement.");
+            toast.error("Erreur lors de l'export.");
         } finally {
             toast.dismiss(loadingToast);
         }
@@ -1187,7 +1253,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     <Wand2 className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Editer dans Canva</span><span className="sm:hidden">Canva</span>
                 </Button>
                 <Button onClick={handleDownloadImages} variant="outline" size="sm" className="gap-1.5 border-primary/50 text-primary hover:bg-primary/10 text-xs sm:text-sm">
-                    <ArrowRight className="w-4 h-4 rotate-90 shrink-0" /> <span className="hidden sm:inline">Telecharger les images</span><span className="sm:hidden">Download</span>
+                    <ArrowRight className="w-4 h-4 rotate-90 shrink-0" /> <span className="hidden sm:inline">Télécharger les slides</span><span className="sm:hidden">Download</span>
                 </Button>
             </div>
 
@@ -1270,17 +1336,17 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     // Auto font size based on text length
                     const getAutoFontSize = (text: string, isFirst: boolean, isHook: boolean, isLastSlide: boolean = false) => {
                         const len = text.length;
-                        if (isHook) return len > 80 ? 11 : len > 50 ? 13 : 15;
+                        if (isHook) return len > 80 ? 14 : len > 50 ? 16 : 19;
                         // CTA/last slide: scale down more gracefully for long texts
                         if (isLastSlide) {
-                            if (len > 250) return 7;
-                            if (len > 180) return 8;
-                            if (len > 120) return 9;
-                            if (len > 80) return 10;
-                            return 11;
+                            if (len > 250) return 9;
+                            if (len > 180) return 10;
+                            if (len > 120) return 12;
+                            if (len > 80) return 13;
+                            return 14;
                         }
-                        if (isFirst) return len > 80 ? 10 : len > 40 ? 11 : 13;
-                        return len > 60 ? 9 : len > 30 ? 10 : 11;
+                        if (isFirst) return len > 80 ? 13 : len > 40 ? 14 : 16;
+                        return len > 60 ? 12 : len > 30 ? 13 : 15;
                     };
 
                     return (
