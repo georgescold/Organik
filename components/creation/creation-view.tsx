@@ -738,7 +738,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="absolute top-2 right-2 z-20 h-8 w-8 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+                                            className="absolute top-2 right-2 z-20 h-8 w-8 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors md:opacity-0 md:group-hover:opacity-100 md:pointer-events-none md:group-hover:pointer-events-auto"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (confirm("Cet angle ne vous plaît pas ? Je vais en générer un autre.")) {
@@ -752,7 +752,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                         </Button>
 
                                         {/* Action Buttons (Top Right) */}
-                                        <div className="absolute top-2 right-12 z-20 flex gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
+                                        <div className="absolute top-2 right-12 z-20 flex gap-1 md:opacity-0 md:group-hover:opacity-100 md:pointer-events-none md:group-hover:pointer-events-auto">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
@@ -801,8 +801,16 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                             >
                                                 <Bookmark className={`w-4 h-4 ${savedIdeas.some(idea => idea.hookText === h.hook) ? "fill-current" : ""}`} />
                                             </Button>
-                                            <Button className={`col-span-3 transition-colors ${selectedHook?.id === h.id ? 'bg-primary text-primary-foreground' : 'group-hover:bg-primary group-hover:text-primary-foreground'}`} onClick={(e) => { e.stopPropagation(); setSelectedHook(selectedHook?.id === h.id ? null : h); }}>
-                                                {selectedHook?.id === h.id ? 'Selectionne' : 'Choisir'}
+                                            <Button className={`col-span-3 transition-colors ${selectedHook?.id === h.id ? 'bg-primary text-primary-foreground' : 'group-hover:bg-primary group-hover:text-primary-foreground'}`} onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (selectedHook?.id === h.id) {
+                                                    // Already selected — scroll to config instead of deselecting
+                                                    setTimeout(() => inlineConfigRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+                                                } else {
+                                                    setSelectedHook(h);
+                                                }
+                                            }}>
+                                                {selectedHook?.id === h.id ? 'Sélectionné ✓' : 'Choisir'}
                                             </Button>
                                         </CardFooter>
                                     </Card>
