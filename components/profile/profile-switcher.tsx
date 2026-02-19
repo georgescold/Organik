@@ -12,8 +12,9 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, Check, Loader2, User } from 'lucide-react';
+import { PlusCircle, Check, Loader2, User, Radar } from 'lucide-react';
 import { createProfile, switchProfile } from '@/server/actions/profile-actions';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -103,7 +104,7 @@ export function ProfileSwitcher({ profiles, activeProfileId }: ProfileSwitcherPr
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="relative h-10 w-10 min-w-[2.5rem] rounded-full border border-border overflow-hidden p-0">
+                    <Button variant="ghost" size="icon" className="relative h-11 w-11 min-w-[2.75rem] rounded-full border border-border overflow-hidden p-0">
                         {activeProfile?.avatarUrl ? (
                             <img
                                 src={activeProfile.avatarUrl}
@@ -119,7 +120,7 @@ export function ProfileSwitcher({ profiles, activeProfileId }: ProfileSwitcherPr
                         )}
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuContent className="w-56 max-w-[90vw]" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                         <div className="flex flex-col space-y-1">
                             <p className="text-sm font-medium leading-none">{activeProfile ? getProfileName(activeProfile) : 'Mon Profil'}</p>
@@ -149,6 +150,13 @@ export function ProfileSwitcher({ profiles, activeProfileId }: ProfileSwitcherPr
                     <DropdownMenuItem onClick={() => setOpen(true)} className="cursor-pointer">
                         <PlusCircle className="mr-2 h-4 w-4" />
                         <span>Créer un profil</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href="/dashboard/admin">
+                            <Radar className="mr-2 h-4 w-4" />
+                            <span>Admin</span>
+                        </Link>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

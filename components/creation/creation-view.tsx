@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { Loader2, Sparkles, Check, RefreshCw, FileText, Clock, ArrowRight, Bookmark, Lightbulb, User, Trash, Image as ImageIcon, X, Target, Copy, Wand2, RefreshCcw } from 'lucide-react';
 import { PostCopyModal } from './post-copy-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { saveAs } from 'file-saver';
+// file-saver is lazy-loaded in handleDownloadImages to reduce bundle
 import { CarouselEditor } from '@/components/smart-carousel/carousel-editor';
 import type { EditorSlide, TextLayer, UserImage } from '@/types/post';
 
@@ -48,6 +48,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [isImproving, setIsImproving] = useState(false);
     const [selectedImprovements, setSelectedImprovements] = useState<Set<number>>(new Set());
     const [generationPhase, setGenerationPhase] = useState<'idle' | 'generating' | 'scoring' | 'improving'>('idle');
+    const inlineConfigRef = useRef<HTMLDivElement>(null);
 
     // Convert current slides to EditorSlide format for the Canva editor
     // Splits text on double newlines into separate layers for TikTok-like layout
@@ -251,6 +252,15 @@ export function CreationView({ initialPost }: CreationViewProps) {
         }
     }, [step]);
 
+    // Scroll to inline config when a hook is selected (important on mobile)
+    useEffect(() => {
+        if (selectedHook && inlineConfigRef.current) {
+            setTimeout(() => {
+                inlineConfigRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
+    }, [selectedHook]);
+
     const handleOpenImagePicker = async (index: number) => {
         setPickingSlideIndex(index);
         setIsImagePickerOpen(true);
@@ -423,6 +433,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
         let downloadedCount = 0;
         const loadingToast = toast.loading("Téléchargement des images...");
+        const { saveAs } = await import('file-saver');
 
         try {
             // Download each image individually (no zip — better for mobile)
@@ -640,8 +651,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 <div className="relative">
                     <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/10 rounded-3xl blur-xl" />
                     <Card className="relative bg-card/60 backdrop-blur-xl border-border/30 shadow-2xl overflow-hidden">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                        <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 hidden md:block" />
+                        <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary/5 rounded-full blur-2xl translate-y-1/2 -translate-x-1/2 hidden md:block" />
 
                         <CardHeader className="text-center space-y-4 pt-8 md:pt-12 pb-4 md:pb-6 relative z-10">
                             <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/25">
@@ -721,13 +732,13 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 {hooks.map((h, i) => (
                                     <Card key={i}
                                         onClick={() => setSelectedHook(selectedHook?.id === h.id ? null : h)}
-                                        className={`cursor-pointer transition-all group bg-card/40 backdrop-blur relative ${replacingIndex === i ? 'opacity-50 pointer-events-none' : ''} ${selectedHook?.id === h.id ? 'border-primary ring-2 ring-primary/30 scale-[1.02]' : selectedHook ? 'opacity-50 hover:opacity-80' : 'hover:border-primary hover:scale-105'}`}
+                                        className={`cursor-pointer transition-all group bg-card/40 backdrop-blur relative ${replacingIndex === i ? 'opacity-50 pointer-events-none' : ''} ${selectedHook?.id === h.id ? 'border-primary ring-2 ring-primary/30 scale-[1.02]' : selectedHook ? 'opacity-70 md:opacity-50 hover:opacity-80' : 'hover:border-primary hover:scale-105'}`}
                                     >
                                         {/* Reject Button (Red Cross) */}
                                         <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="absolute top-2 right-2 z-20 h-8 w-8 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors md:opacity-0 md:group-hover:opacity-100"
+                                            className="absolute top-2 right-2 z-20 h-8 w-8 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (confirm("Cet angle ne vous plaît pas ? Je vais en générer un autre.")) {
@@ -741,11 +752,11 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                         </Button>
 
                                         {/* Action Buttons (Top Right) */}
-                                        <div className="absolute top-2 right-12 z-20 flex gap-1">
+                                        <div className="absolute top-2 right-12 z-20 flex gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto">
                                             <Button
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-8 w-8 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors md:opacity-0 md:group-hover:opacity-100"
+                                                className="h-8 w-8 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleGenerateVariations(i, h);
@@ -802,8 +813,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 }
 
                 {/* Inline Config - shown when a hook is selected */}
-                {selectedHook && hooks.length > 0 && (
-                    <div className="animate-in fade-in slide-in-from-top-2 duration-300 max-w-lg mx-auto">
+                {selectedHook && (
+                    <div ref={inlineConfigRef} className="animate-in fade-in slide-in-from-top-2 duration-300 max-w-lg mx-auto">
                         <Card className="p-4 sm:p-5 space-y-4 border-primary/30 bg-card/60 backdrop-blur">
                             <div className="text-sm text-muted-foreground text-center truncate px-2">
                                 <span className="font-medium text-foreground">"{selectedHook.hook}"</span>
@@ -1015,13 +1026,13 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         {/* Score header - compact */}
                         <div className="flex items-center gap-4 p-4 pb-3">
                             <div className="relative flex-shrink-0">
-                                <svg width="72" height="72" viewBox="0 0 80 80" className="-rotate-90">
+                                <svg viewBox="0 0 80 80" className="-rotate-90 w-16 h-16 sm:w-[72px] sm:h-[72px]">
                                     <circle cx="40" cy="40" r="36" fill="none" className="stroke-border/20" strokeWidth="5" />
                                     <circle cx="40" cy="40" r="36" fill="none" strokeWidth="5" strokeLinecap="round"
                                         style={{ stroke: scoreColor, strokeDasharray: `${strokeDash} ${circumference}`, transition: 'stroke-dasharray 0.8s ease-out' }} />
                                 </svg>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="text-xl font-bold">{total}</span>
+                                    <span className="text-lg sm:text-xl font-bold">{total}</span>
                                     <span className="text-[9px] text-muted-foreground/60">/100</span>
                                 </div>
                             </div>
@@ -1035,7 +1046,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         </div>
 
                         {/* Criteria - minimal bars */}
-                        <div className="px-4 pb-3 grid grid-cols-3 gap-x-3 gap-y-2">
+                        <div className="px-4 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-2">
                             {Object.entries(predictiveScore.scores || {}).map(([key, val]) => {
                                 const v = val as number;
                                 const pct = (v / 20) * 100;
@@ -1231,7 +1242,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 </DialogContent>
             </Dialog>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {slides.map((slide, index) => {
                     // Split text into paragraphs for TikTok-like overlay rendering
                     // Don't split the last slide (CTA) — it stays as a single block

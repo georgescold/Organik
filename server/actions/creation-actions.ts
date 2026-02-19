@@ -1360,7 +1360,7 @@ If no contradiction, respond with JSON: {"contradiction": false}`
                 userId: finalUserId,
                 ...(collectionId && collectionId !== 'all' ? { collections: { some: { id: collectionId } } } : {})
             },
-            select: { id: true, humanId: true, descriptionLong: true, keywords: true, mood: true, style: true, colors: true, storageUrl: true }
+            select: { id: true, humanId: true, descriptionLong: true, keywords: true, mood: true, style: true, colors: true, qualityScore: true, storageUrl: true }
         })
     ]);
 
@@ -1383,35 +1383,81 @@ If no contradiction, respond with JSON: {"contradiction": false}`
         return { slides: slides, description, warning: "Pas assez d'images disponibles dans cette collection (ou filtre anti-répétition activé)." };
     }
 
-    // 3. Match Images (Claude) - Advanced emotional & visual matching
+    // 3. Pre-filter by relevance + quality, then match with Claude
     try {
         const slidesText = slides.map(s =>
             `Slide ${s.slide_number}: "${s.text}" [Intention: ${s.intention}]`
         ).join('\n');
 
-        // Fisher-Yates shuffle for proper randomization
-        const shuffled = [...images];
-        for (let i = shuffled.length - 1; i > 0; i--) {
+        // Build context keywords from all slides (hook text + slide texts)
+        const allSlideText = slides.map(s => s.text).join(' ').toLowerCase();
+        const contextWords = allSlideText
+            .replace(/[^a-zàâäéèêëïîôùûüÿçœæ\s]/gi, ' ')
+            .split(/\s+/)
+            .filter(w => w.length > 3);
+        const contextSet = new Set(contextWords);
+
+        // Score each image: relevance (keywords + description match) × quality
+        const scored = images.map(img => {
+            let relevance = 0;
+
+            // Keyword matching (strongest signal)
+            try {
+                const imgKeywords: string[] = JSON.parse(img.keywords || '[]');
+                for (const kw of imgKeywords) {
+                    const kwLower = kw.toLowerCase();
+                    // Exact keyword found in slide text
+                    if (allSlideText.includes(kwLower)) relevance += 3;
+                    // Partial match (keyword word found in context)
+                    else if ([...contextSet].some(w => kwLower.includes(w) || w.includes(kwLower))) relevance += 1;
+                }
+            } catch { /* ignore parse errors */ }
+
+            // Description matching (weaker signal, broader coverage)
+            const descWords = (img.descriptionLong || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
+            for (const w of descWords) {
+                if (contextSet.has(w)) relevance += 0.5;
+            }
+
+            // Mood bonus: boost images whose mood relates to slide intentions
+            const mood = (img.mood || '').toLowerCase();
+            const intentions = slides.map(s => (s.intention || '').toLowerCase());
+            if (intentions.some(i => mood.includes(i) || i.includes(mood))) relevance += 2;
+
+            const quality = img.qualityScore ?? 5;
+            // Combined score: relevance weighted heavily, quality as multiplier
+            const combined = (relevance + 1) * (quality / 10);
+
+            return { ...img, _relevance: relevance, _quality: quality, _score: combined };
+        });
+
+        // Sort by combined score (relevance × quality), take top 50
+        scored.sort((a, b) => b._score - a._score);
+        const preFiltered = scored.slice(0, 50);
+
+        // Shuffle within the top 50 for variety (avoid always picking same images)
+        for (let i = preFiltered.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            [preFiltered[i], preFiltered[j]] = [preFiltered[j], preFiltered[i]];
         }
-        const candidateImages = shuffled.slice(0, 50);
+        const candidateImages = preFiltered;
 
         const imagesText = candidateImages.map(i =>
-            `ID: ${i.id} | Desc: ${i.descriptionLong} | Keywords: ${i.keywords} | Mood: ${i.mood || 'N/A'} | Style: ${i.style || 'N/A'} | Colors: ${i.colors || 'N/A'}`
+            `ID: ${i.id} | Quality: ${i.qualityScore ?? 5}/10 | Desc: ${i.descriptionLong} | Keywords: ${i.keywords} | Mood: ${i.mood || 'N/A'} | Style: ${i.style || 'N/A'} | Colors: ${i.colors || 'N/A'}`
         ).join('\n---\n');
 
         const matchingPrompt = `You are a visual director for viral TikTok carousels. Match the BEST image to each slide.
 
 MATCHING CRITERIA (in order of priority):
-1. **Emotional Match**: The image mood MUST match the slide intention:
+1. **Image Quality**: STRONGLY prefer images with Quality score 7+/10. Avoid images below 5/10 unless no alternative exists.
+2. **Emotional Match**: The image mood MUST match the slide intention:
    - Hook slides -> Bold, eye-catching, high-contrast images
    - Tension slides -> Dark, mysterious, intriguing images
    - Value slides -> Clean, clear, trustworthy images
    - CTA slides -> Warm, inviting, personal images
-2. **Visual Storytelling**: Images should create a VISUAL PROGRESSION through the carousel. Don't use visually similar images back-to-back.
-3. **Content Relevance**: Image description/keywords should relate to the slide text topic.
-4. **Color Cohesion**: Prefer images that share a similar color palette for visual consistency across the carousel.
+3. **Visual Storytelling**: Images should create a VISUAL PROGRESSION through the carousel. Don't use visually similar images back-to-back.
+4. **Content Relevance**: Image description/keywords should relate to the slide text topic.
+5. **Color Cohesion**: Prefer images that share a similar color palette for visual consistency across the carousel.
 
 CONSTRAINTS:
 - Each slide MUST have a UNIQUE image ID. NO duplicates.

@@ -16,8 +16,17 @@ Retourne UNIQUEMENT un JSON valide avec cette structure :
   "style": "Photo réaliste, Illustration 3D, Minimaliste...",
   "composition": "Plan serré, Grand angle, Contre-plongée...",
   "facial_expression": "Détails sur l'expression (ou null)",
-  "text_content": "Texte visible (ou null)"
+  "text_content": "Texte visible (ou null)",
+  "quality_score": 7
 }
+
+Pour quality_score (1-10), évalue la QUALITÉ TECHNIQUE et VISUELLE globale :
+- Netteté / absence de flou (1-3 points)
+- Éclairage et exposition (1-3 points)
+- Composition et cadrage photographique (1-2 points)
+- Rendu visuel global / professionnalisme (1-2 points)
+Un 7+ = image de qualité professionnelle. Un 4-6 = correct mais amateur. Un 1-3 = mauvaise qualité.
+
 Ne rajoute pas de markdown, juste le JSON brute.`,
 
   HOOK_GENERATION_SYSTEM: `Tu es le meilleur copywriter TikTok au monde. Tu sais créer des hooks qui stoppent le scroll.`,

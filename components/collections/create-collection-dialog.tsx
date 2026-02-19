@@ -46,9 +46,10 @@ export function CreateCollectionDialog() {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button size="sm" className="w-full justify-start bg-[#FE2C55] hover:bg-[#FE2C55]/90 text-white font-bold shadow-[0_4px_14px_0_rgba(254,44,85,0.39)] transition-transform hover:scale-[1.02] border-0">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Nouvelle Collection
+                <Button className="h-10 md:h-auto md:w-full justify-center md:justify-start bg-[#FE2C55] hover:bg-[#FE2C55]/90 text-white font-bold shadow-[0_4px_14px_0_rgba(254,44,85,0.39)] border-0 touch-manipulation px-3 md:px-4 text-sm">
+                    <Plus className="h-4 w-4 md:mr-2 shrink-0" />
+                    <span className="hidden md:inline">Nouvelle Collection</span>
+                    <span className="md:hidden">Créer</span>
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]">

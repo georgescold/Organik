@@ -53,7 +53,7 @@ export function MobileNav({ isOpen, onToggle, children }: MobileNavProps) {
             {/* Drawer Sidebar */}
             <div
                 className={cn(
-                    "fixed top-0 left-0 h-full w-64 bg-black/95 border-r border-white/10 z-40 transition-transform duration-300 ease-in-out md:hidden",
+                    "fixed top-0 left-0 h-full w-64 max-w-[75vw] bg-black/95 border-r border-white/10 z-40 transition-transform duration-300 ease-in-out md:hidden",
                     isOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >

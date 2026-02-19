@@ -60,14 +60,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 <RocketIcon
                     isLaunching={true}
                     showSmoke={false}
-                    className="w-12 h-12 md:w-20 md:h-20 mt-2 md:mt-4 group-hover:scale-105 transition-transform duration-300"
+                    className="w-10 h-10 sm:w-12 sm:h-12 md:w-20 md:h-20 mt-2 md:mt-4 group-hover:scale-105 transition-transform duration-300"
                 />
 
                 {/* Glitch Logo */}
                 <div className="relative">
-                    <span className="block text-xl md:text-3xl font-black tracking-tighter text-white leading-none select-none relative z-10 mix-blend-screen">Organik</span>
-                    <span className="absolute top-0 left-0 text-xl md:text-3xl font-black tracking-tighter text-[#25F4EE] leading-none select-none -translate-x-[1px] -translate-y-[1px] z-0 opacity-80 animate-glitch-cyan">Organik</span>
-                    <span className="absolute top-0 left-0 text-xl md:text-3xl font-black tracking-tighter text-[#FE2C55] leading-none select-none translate-x-[1px] translate-y-[1px] z-0 opacity-80 animate-glitch-red">Organik</span>
+                    <span className="block text-lg sm:text-xl md:text-3xl font-black tracking-tighter text-white leading-none select-none relative z-10 mix-blend-screen">Organik</span>
+                    <span className="absolute top-0 left-0 text-lg sm:text-xl md:text-3xl font-black tracking-tighter text-[#25F4EE] leading-none select-none -translate-x-[1px] -translate-y-[1px] z-0 opacity-80 animate-glitch-cyan hidden sm:block">Organik</span>
+                    <span className="absolute top-0 left-0 text-lg sm:text-xl md:text-3xl font-black tracking-tighter text-[#FE2C55] leading-none select-none translate-x-[1px] translate-y-[1px] z-0 opacity-80 animate-glitch-red hidden sm:block">Organik</span>
                 </div>
             </Link>
 
@@ -90,8 +90,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     return (
         <div className="min-h-screen flex flex-col relative overflow-hidden bg-background">
             {/* Background Ambience - Clean White/Black with Red accents */}
-            <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary/10 rounded-full blur-[100px] pointer-events-none mix-blend-multiply z-0" />
-            <div className="fixed bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-secondary/10 rounded-full blur-[120px] pointer-events-none mix-blend-multiply z-0" />
+            <div className="fixed top-[-10%] left-[-10%] w-[250px] h-[250px] md:w-[500px] md:h-[500px] bg-primary/10 rounded-full blur-[80px] md:blur-[100px] pointer-events-none mix-blend-multiply z-0" />
+            <div className="fixed bottom-[-10%] right-[-10%] w-[300px] h-[300px] md:w-[600px] md:h-[600px] bg-secondary/10 rounded-full blur-[80px] md:blur-[120px] pointer-events-none mix-blend-multiply z-0" />
 
             <div className="relative z-10 w-full flex flex-col min-h-screen">
                 <Header />

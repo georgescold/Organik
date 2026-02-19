@@ -167,13 +167,13 @@ export function DashboardTabs({
                         <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card/90 to-transparent z-10 pointer-events-none rounded-r-2xl" />
                     )}
 
-                    <div ref={tabsScrollRef} className="flex gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide min-w-0 flex-1 -mx-0.5 px-0.5 snap-x snap-mandatory">
+                    <div ref={tabsScrollRef} className="flex gap-0.5 sm:gap-1 overflow-x-auto scrollbar-hide min-w-0 flex-1 -mx-0.5 px-0.5 snap-x snap-proximity">
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 onClick={() => handleTabChange(tab.id)}
                                 className={`
-                                    relative px-2.5 sm:px-3 md:px-6 py-2.5 md:py-2.5 font-bold text-[10px] sm:text-xs md:text-sm transition-all duration-200 rounded-xl whitespace-nowrap snap-start min-h-[40px] touch-manipulation
+                                    relative px-3 sm:px-3.5 md:px-6 py-2.5 md:py-2.5 font-bold text-[11px] sm:text-xs md:text-sm transition-all duration-200 rounded-xl whitespace-nowrap snap-start min-h-[44px] touch-manipulation
                                     ${activeTab === tab.id
                                         ? 'bg-gradient-to-r from-primary/90 to-primary text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/40'
                                         : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 active:bg-primary/10'

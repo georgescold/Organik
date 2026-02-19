@@ -52,6 +52,8 @@ export function ImageWithFallback({ src, fallbackSrc, alt, className, ...props }
             alt={alt}
             className={className}
             onError={handleError}
+            loading="lazy"
+            decoding="async"
         />
     );
 }

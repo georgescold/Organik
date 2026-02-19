@@ -61,7 +61,47 @@ export type ImageAnalysisResult = {
     composition: string;
     facial_expression: string | null;
     text_content: string | null;
+    quality_score: number;
 };
+
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
+
+export async function analyzeImageQualityOnly(imageBase64: string, mediaType: string = "image/jpeg", apiKey: string): Promise<number> {
+    if (!apiKey) throw new Error("API Key is required.");
+
+    const client = new Anthropic({ apiKey });
+
+    const msg = await client.messages.create({
+        model: HAIKU_MODEL,
+        max_tokens: 64,
+        messages: [
+            {
+                role: "user",
+                content: [
+                    {
+                        type: "image",
+                        source: {
+                            type: "base64",
+                            media_type: mediaType as any,
+                            data: imageBase64,
+                        },
+                    },
+                    {
+                        type: "text",
+                        text: `Score la qualité technique de cette image de 1 à 10.
+Critères : netteté, éclairage, composition, rendu visuel.
+7+ = pro, 4-6 = amateur, 1-3 = mauvaise.
+Réponds UNIQUEMENT avec le chiffre, rien d'autre.`
+                    }
+                ],
+            },
+        ],
+    });
+
+    const text = (msg.content[0] as any).text.trim();
+    const score = parseInt(text, 10);
+    return (score >= 1 && score <= 10) ? score : 5;
+}
 
 export async function analyzePostContent(images: string[], textContext: string, apiKey: string) {
     if (!apiKey) throw new Error("API Key required");

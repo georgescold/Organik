@@ -3,6 +3,7 @@
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { Prisma } from '@prisma/client';
 
 export async function createCollection(name: string) {
     const session = await auth();
@@ -15,7 +16,7 @@ export async function createCollection(name: string) {
                 userId: session.user.id
             }
         });
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true, collection };
     } catch (e) {
         console.error("Create collection error:", e);
@@ -28,10 +29,15 @@ export async function getUserCollections() {
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
+        // Collections are shared across all users — no userId filter
         const collections = await prisma.collection.findMany({
-            where: { userId: session.user.id },
             orderBy: { createdAt: 'desc' },
-            include: { _count: { select: { images: true } } }
+            select: {
+                id: true,
+                name: true,
+                createdAt: true,
+                _count: { select: { images: true } }
+            }
         });
         return { success: true, collections };
     } catch (e) {
@@ -45,27 +51,18 @@ export async function addImageToCollection(collectionId: string, imageId: string
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        // Verify ownership
-        const collection = await prisma.collection.findUnique({
-            where: { id: collectionId }
-        });
-        if (!collection || collection.userId !== session.user.id) {
-            return { error: 'Collection not found or access denied' };
-        }
-
+        // Single query — update will throw P2025 if collection not found
         await prisma.collection.update({
             where: { id: collectionId },
-            data: {
-                images: {
-                    connect: { id: imageId }
-                }
-            }
+            data: { images: { connect: { id: imageId } } }
         });
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            return { error: 'Collection not found' };
+        }
         console.error("Add to collection error:", e);
-        // Prisma might throw if already connected, we can return success or specific error
         return { error: 'Failed to add image to collection' };
     }
 }
@@ -75,24 +72,16 @@ export async function removeImageFromCollection(collectionId: string, imageId: s
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        const collection = await prisma.collection.findUnique({
-            where: { id: collectionId }
-        });
-        if (!collection || collection.userId !== session.user.id) {
-            return { error: 'Access denied' };
-        }
-
         await prisma.collection.update({
             where: { id: collectionId },
-            data: {
-                images: {
-                    disconnect: { id: imageId }
-                }
-            }
+            data: { images: { disconnect: { id: imageId } } }
         });
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            return { error: 'Collection not found' };
+        }
         console.error("Remove from collection error:", e);
         return { error: 'Failed to remove image' };
     }
@@ -103,19 +92,15 @@ export async function deleteCollection(collectionId: string) {
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        const collection = await prisma.collection.findUnique({
-            where: { id: collectionId }
-        });
-        if (!collection || collection.userId !== session.user.id) {
-            return { error: 'Access denied' };
-        }
-
         await prisma.collection.delete({
             where: { id: collectionId }
         });
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            return { error: 'Collection not found' };
+        }
         return { error: 'Failed to delete collection' };
     }
 }
@@ -125,28 +110,18 @@ export async function addImagesToCollection(collectionId: string, imageIds: stri
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        const collection = await prisma.collection.findUnique({
-            where: { id: collectionId }
-        });
-        if (!collection || collection.userId !== session.user.id) {
-            return { error: 'Access denied' };
-        }
-
-        // Connect all images
-        const connectQuery = imageIds.map(id => ({ id }));
-
         await prisma.collection.update({
             where: { id: collectionId },
             data: {
-                images: {
-                    connect: connectQuery
-                }
+                images: { connect: imageIds.map(id => ({ id })) }
             }
         });
-
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            return { error: 'Collection not found' };
+        }
         console.error("Batch add to collection error:", e);
         return { error: 'Failed to add images' };
     }
@@ -157,27 +132,18 @@ export async function removeImagesFromCollection(collectionId: string, imageIds:
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        const collection = await prisma.collection.findUnique({
-            where: { id: collectionId }
-        });
-        if (!collection || collection.userId !== session.user.id) {
-            return { error: 'Access denied' };
-        }
-
-        const disconnectQuery = imageIds.map(id => ({ id }));
-
         await prisma.collection.update({
             where: { id: collectionId },
             data: {
-                images: {
-                    disconnect: disconnectQuery
-                }
+                images: { disconnect: imageIds.map(id => ({ id })) }
             }
         });
-
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            return { error: 'Collection not found' };
+        }
         console.error("Batch remove from collection error:", e);
         return { error: 'Failed to remove images' };
     }

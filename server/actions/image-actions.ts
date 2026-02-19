@@ -4,7 +4,8 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { supabaseAdmin } from '@/lib/supabase';
 import { revalidatePath } from 'next/cache';
-import { analyzeImage, ImageAnalysisResult } from '@/lib/ai/claude';
+import { analyzeImage, analyzeImageQualityOnly, ImageAnalysisResult } from '@/lib/ai/claude';
+import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -109,7 +110,8 @@ export async function uploadImage(formData: FormData) {
                     style: "Unknown",
                     composition: "Unknown",
                     facial_expression: "Unknown",
-                    text_content: "Unknown"
+                    text_content: "Unknown",
+                    quality_score: 5
                 };
             }
 
@@ -125,6 +127,7 @@ export async function uploadImage(formData: FormData) {
                     mood: analysis.mood,
                     style: analysis.style,
                     colors: JSON.stringify(analysis.colors || []),
+                    qualityScore: analysis.quality_score ?? 5,
                     collections: collectionId ? { connect: { id: collectionId } } : undefined
                 },
             });
@@ -140,7 +143,7 @@ export async function uploadImage(formData: FormData) {
     const results = await Promise.all(files.map(processFile));
     const successCount = results.filter(r => r.success).length;
 
-    revalidatePath('/dashboard');
+    revalidatePath('/dashboard', 'page');
 
     // Return the first error if strictly everything failed due to a blocking error, or generic message
     if (successCount === 0) {
@@ -163,7 +166,21 @@ export async function getUserImages(collectionId?: string) {
         const imagesRaw = await prisma.image.findMany({
             where: whereClause,
             orderBy: { createdAt: 'desc' },
-            include: { collections: { select: { id: true, name: true } } } // Include to know which are added
+            select: {
+                id: true,
+                humanId: true,
+                userId: true,
+                filename: true,
+                storageUrl: true,
+                descriptionLong: true,
+                keywords: true,
+                mood: true,
+                style: true,
+                colors: true,
+                qualityScore: true,
+                createdAt: true,
+                collections: { select: { id: true, name: true } }
+            }
         });
 
         // Parse JSON strings to arrays for keywords and colors
@@ -184,35 +201,28 @@ export async function deleteImage(imageId: string, storageUrl: string) {
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        const image = await prisma.image.findUnique({
-            where: { id: imageId }
-        });
-
-        if (!image || image.userId !== session.user.id) {
-            return { error: 'Access denied' };
-        }
-
-        // Delete from DB first
+        // Single query: delete directly (will throw P2025 if not found)
         await prisma.image.delete({
-            where: { id: imageId }
+            where: { id: imageId, userId: session.user.id }
         });
 
-        // Delete from Supabase Storage
-        // Extract path from full URL: https://xxx.supabase.co/storage/v1/object/public/images/userId/filename.ext
+        // Delete from Supabase Storage in background (non-blocking)
         try {
             const url = new URL(storageUrl);
             const pathParts = url.pathname.split('/storage/v1/object/public/images/');
             if (pathParts.length > 1) {
-                const storagePath = pathParts[1]; // userId/filename.ext
-                await supabaseAdmin.storage.from(SUPABASE_BUCKET).remove([storagePath]);
+                supabaseAdmin.storage.from(SUPABASE_BUCKET).remove([pathParts[1]]);
             }
         } catch (e) {
             console.error("Failed to delete from Supabase Storage:", e);
         }
 
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            return { error: 'Access denied' };
+        }
         return { error: 'Failed to delete image' };
     }
 }
@@ -222,42 +232,35 @@ export async function deleteImages(imageIds: string[]) {
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        // Verify ownership for all
+        // Fetch only storageUrl for owned images (lightweight query)
         const images = await prisma.image.findMany({
-            where: {
-                id: { in: imageIds },
-                userId: session.user.id
-            }
+            where: { id: { in: imageIds }, userId: session.user.id },
+            select: { id: true, storageUrl: true }
         });
 
         if (images.length !== imageIds.length) {
             return { error: "Access denied for some images" };
         }
 
-        // Delete from DB
+        // Delete from DB in single batch
         await prisma.image.deleteMany({
-            where: { id: { in: imageIds } }
+            where: { id: { in: imageIds }, userId: session.user.id }
         });
 
-        // Delete from Supabase Storage
+        // Delete from Supabase Storage (non-blocking)
         const storagePaths: string[] = [];
         for (const img of images) {
             try {
                 const url = new URL(img.storageUrl);
                 const pathParts = url.pathname.split('/storage/v1/object/public/images/');
-                if (pathParts.length > 1) {
-                    storagePaths.push(pathParts[1]);
-                }
-            } catch (e) {
-                console.error("Failed to parse storage URL:", img.storageUrl);
-            }
+                if (pathParts.length > 1) storagePaths.push(pathParts[1]);
+            } catch {}
         }
-
         if (storagePaths.length > 0) {
-            await supabaseAdmin.storage.from(SUPABASE_BUCKET).remove(storagePaths);
+            supabaseAdmin.storage.from(SUPABASE_BUCKET).remove(storagePaths);
         }
 
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
         return { error: "Failed to delete images" };
@@ -269,80 +272,141 @@ export async function retryFailedAnalyses() {
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        // 1. Find failed images - Expanded Criteria
-        const failedImages = await prisma.image.findMany({
-            where: {
-                userId: session.user.id,
-                OR: [
-                    { descriptionLong: { contains: "Analysis failed" } },
-                    { descriptionLong: "" },
-                    { descriptionLong: "Unknown" },
-                ]
-            }
-        });
+        // Find failed images + fetch API key in parallel
+        const [failedImages, user] = await Promise.all([
+            prisma.image.findMany({
+                where: {
+                    userId: session.user.id,
+                    OR: [
+                        { descriptionLong: { contains: "Analysis failed" } },
+                        { descriptionLong: "" },
+                        { descriptionLong: "Unknown" },
+                    ]
+                },
+                select: { id: true, storageUrl: true }
+            }),
+            prisma.user.findUnique({
+                where: { id: session.user.id },
+                select: { anthropicApiKey: true }
+            })
+        ]);
 
         if (failedImages.length === 0) return { success: true, count: 0, message: "No failed analysis found" };
 
-        let successCount = 0;
-
-        const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { anthropicApiKey: true }
-        });
         const apiKey = user?.anthropicApiKey;
         if (!apiKey) return { error: "Clé API manquante pour relancer l'analyse." };
 
-        for (const img of failedImages) {
-            try {
-                // Download from Supabase Storage or fetch from URL
-                let base64: string;
-                let mimeType: string;
+        let successCount = 0;
 
+        // Process in parallel batches of 3
+        for (let i = 0; i < failedImages.length; i += 3) {
+            const batch = failedImages.slice(i, i + 3);
+
+            await Promise.all(batch.map(async (img) => {
                 try {
-                    // Fetch image from URL (works for both Supabase and legacy local URLs)
                     const response = await fetch(img.storageUrl);
-                    if (!response.ok) {
-                        console.error(`Failed to fetch image ${img.id}: ${response.status}`);
-                        continue;
-                    }
+                    if (!response.ok) return;
+
                     const arrayBuffer = await response.arrayBuffer();
-                    const buffer = Buffer.from(arrayBuffer);
-                    base64 = buffer.toString('base64');
+                    const base64 = Buffer.from(arrayBuffer).toString('base64');
+                    const mimeType = response.headers.get('content-type') || 'image/jpeg';
 
-                    const contentType = response.headers.get('content-type');
-                    mimeType = contentType || 'image/jpeg';
-                } catch (fetchError) {
-                    console.error(`Failed to download image ${img.id}:`, fetchError);
-                    continue;
+                    const analysis = await analyzeImage(base64, mimeType, apiKey);
+
+                    await prisma.image.update({
+                        where: { id: img.id },
+                        data: {
+                            descriptionLong: analysis.description_long || "No description",
+                            keywords: JSON.stringify(analysis.keywords || []),
+                            mood: analysis.mood,
+                            style: analysis.style,
+                            colors: JSON.stringify(analysis.colors || []),
+                            qualityScore: analysis.quality_score ?? 5,
+                        }
+                    });
+
+                    successCount++;
+                } catch (e) {
+                    console.error(`Retry failed for image ${img.id}:`, e);
                 }
-
-                // Analyze
-                const analysis = await analyzeImage(base64, mimeType, apiKey);
-
-                // Update
-                await prisma.image.update({
-                    where: { id: img.id },
-                    data: {
-                        descriptionLong: analysis.description_long || "No description",
-                        keywords: JSON.stringify(analysis.keywords || []),
-                        mood: analysis.mood,
-                        style: analysis.style,
-                        colors: JSON.stringify(analysis.colors || []),
-                    }
-                });
-
-                successCount++;
-            } catch (e) {
-                console.error(`Retry failed for image ${img.id}:`, e);
-                // Continue
-            }
+            }));
         }
 
-        revalidatePath('/dashboard');
+        revalidatePath('/dashboard', 'page');
         return { success: true, count: successCount, total: failedImages.length };
 
     } catch (e) {
         console.error("Critical error in retry", e);
         return { error: 'Retry process failed' };
+    }
+}
+
+export async function rescoreImageQuality() {
+    const session = await auth();
+    if (!session?.user?.id) return { error: 'Unauthorized' };
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { anthropicApiKey: true }
+        });
+        const apiKey = user?.anthropicApiKey;
+        if (!apiKey) return { error: "Clé API manquante. Configurez-la dans les réglages." };
+
+        // Find all images without a quality score (shared pool — no userId filter, same as "Toutes les images")
+        const images = await prisma.image.findMany({
+            where: {
+                OR: [
+                    { qualityScore: null },
+                    { qualityScore: { equals: 0 } },
+                ],
+            },
+            select: { id: true, storageUrl: true }
+        });
+
+        if (images.length === 0) {
+            const totalImages = await prisma.image.count();
+            return { success: true, count: 0, message: `Toutes les ${totalImages} images ont déjà un score qualité.` };
+        }
+
+        // Limit to 30 images per run to avoid server action timeout
+        const toProcess = images.slice(0, 30);
+        const remaining = images.length - toProcess.length;
+        let successCount = 0;
+
+        // Process in batches of 5 in parallel
+        for (let i = 0; i < toProcess.length; i += 5) {
+            const batch = toProcess.slice(i, i + 5);
+
+            await Promise.all(batch.map(async (img) => {
+                try {
+                    const response = await fetch(img.storageUrl);
+                    if (!response.ok) return;
+
+                    const arrayBuffer = await response.arrayBuffer();
+                    const buffer = Buffer.from(arrayBuffer);
+                    const base64 = buffer.toString('base64');
+                    const mimeType = response.headers.get('content-type') || 'image/jpeg';
+
+                    const score = await analyzeImageQualityOnly(base64, mimeType, apiKey);
+
+                    await prisma.image.update({
+                        where: { id: img.id },
+                        data: { qualityScore: score }
+                    });
+
+                    successCount++;
+                } catch (e) {
+                    console.error(`Quality scoring failed for image ${img.id}:`, e);
+                }
+            }));
+        }
+
+        revalidatePath('/dashboard', 'page');
+        return { success: true, count: successCount, total: toProcess.length, remaining };
+
+    } catch (e) {
+        console.error("Critical error in quality rescore", e);
+        return { error: 'Échec du rescoring qualité' };
     }
 }

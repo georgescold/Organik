@@ -413,7 +413,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             for (let i = 0; i < slides.length; i++) {
                 setActiveSlideIndex(i);
                 await new Promise(resolve => setTimeout(resolve, i === 0 ? 1500 : 800));
-                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+                await new Promise(resolve => requestAnimationFrame(resolve));
 
                 const capturedCanvas = await html2canvas(canvasRef.current!, {
                     scale: 3,
@@ -467,11 +467,11 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 <div className="flex gap-1 sm:gap-1.5 shrink-0">
                     {/* Undo/Redo — mobile */}
                     <div className="flex sm:hidden items-center">
-                        <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} className="text-white/60 hover:bg-white/10 disabled:opacity-30 h-8 w-8 p-0">
-                            <Undo2 className="h-3.5 w-3.5" />
+                        <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} className="text-white/60 hover:bg-white/10 disabled:opacity-30 h-9 w-9 p-0 touch-manipulation">
+                            <Undo2 className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} className="text-white/60 hover:bg-white/10 disabled:opacity-30 h-8 w-8 p-0">
-                            <Redo2 className="h-3.5 w-3.5" />
+                        <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} className="text-white/60 hover:bg-white/10 disabled:opacity-30 h-9 w-9 p-0 touch-manipulation">
+                            <Redo2 className="h-4 w-4" />
                         </Button>
                     </div>
 
@@ -493,7 +493,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         <div key={slide.id} className="relative group shrink-0">
                             <div
                                 className={cn(
-                                    "aspect-[9/16] rounded cursor-pointer border-2 transition-all overflow-hidden relative w-12 sm:w-14 md:w-auto touch-manipulation",
+                                    "aspect-[9/16] rounded cursor-pointer border-2 transition-all overflow-hidden relative w-14 sm:w-16 md:w-auto touch-manipulation",
                                     idx === activeSlideIndex
                                         ? "border-primary ring-2 ring-primary/30"
                                         : "border-white/10 hover:border-white/30"
@@ -718,18 +718,18 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     variant="outline" size="sm"
                     onClick={() => { setActiveSlideIndex(Math.max(0, activeSlideIndex - 1)); setSelectedLayerId(null); }}
                     disabled={activeSlideIndex === 0}
-                    className="border-white/10 text-white hover:bg-white/10 h-7 sm:h-9"
+                    className="border-white/10 text-white hover:bg-white/10 h-9 touch-manipulation"
                 >
                     <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Button>
-                <span className="text-white/60 text-xs sm:text-sm">
+                <span className="text-white/60 text-sm font-medium tabular-nums">
                     {activeSlideIndex + 1} / {slides.length}
                 </span>
                 <Button
                     variant="outline" size="sm"
                     onClick={() => { setActiveSlideIndex(Math.min(slides.length - 1, activeSlideIndex + 1)); setSelectedLayerId(null); }}
                     disabled={activeSlideIndex === slides.length - 1}
-                    className="border-white/10 text-white hover:bg-white/10 h-7 sm:h-9"
+                    className="border-white/10 text-white hover:bg-white/10 h-9 touch-manipulation"
                 >
                     <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Button>

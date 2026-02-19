@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -33,17 +33,25 @@ export function AddExistingImagesDialog({ open, onOpenChange, collectionId, curr
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [search, setSearch] = useState("");
     const router = useRouter();
+    const cacheRef = useRef<any[] | null>(null);
 
     useEffect(() => {
         if (open) {
-            setLoading(true);
-            getUserImages().then(res => {
-                if (res.success) {
-                    setImages(res.images || []);
-                }
-                setLoading(false);
-            });
             setSelectedIds(new Set());
+            // Use cached images if available, otherwise fetch
+            if (cacheRef.current) {
+                setImages(cacheRef.current);
+            } else {
+                setLoading(true);
+                getUserImages().then(res => {
+                    if (res.success) {
+                        const imgs = res.images || [];
+                        setImages(imgs);
+                        cacheRef.current = imgs;
+                    }
+                    setLoading(false);
+                });
+            }
         }
     }, [open]);
 
@@ -65,6 +73,7 @@ export function AddExistingImagesDialog({ open, onOpenChange, collectionId, curr
 
         if (result.success) {
             toast.success(`${selectedIds.size} images ajoutées !`);
+            cacheRef.current = null; // Invalidate cache after add
             onOpenChange(false);
             router.refresh();
         } else {

@@ -618,3 +618,14 @@ button:not(:disabled):active,
   50% { transform: scaleY(0.3) translateY(-2px); opacity: 0.1; }
   100% { transform: scaleY(0.4) translateY(0); opacity: 0.3; }
 }
+
+/* ═══════════════════════════════════════
+   REDUCED MOTION — Accessibility & perf
+   ═══════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

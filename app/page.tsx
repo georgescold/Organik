@@ -29,8 +29,8 @@ export default function LandingPage() {
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 mix-blend-overlay"></div>
         <div className="absolute inset-0 bg-gradient-to-b from-black via-[#050505] to-black opacity-90"></div>
 
-        {/* Stars - White (Updated: Smaller & More Discreet) */}
-        <div className="absolute inset-0 animate-[fly_20s_linear_infinite]"
+        {/* Stars - White */}
+        <div className="absolute inset-0 animate-[fly_20s_linear_infinite] will-change-transform"
           style={{
             backgroundImage: 'radial-gradient(1px 1px at 10px 10px, white 100%, transparent 100%), radial-gradient(0.8px 0.8px at 150px 150px, rgba(255,255,255,0.5) 100%, transparent 100%)',
             backgroundSize: '300px 300px',
@@ -38,8 +38,8 @@ export default function LandingPage() {
           }}
         />
 
-        {/* Stars - Yellow Twinkling (Updated: Smaller & More Discreet) */}
-        <div className="absolute inset-0 animate-[fly_30s_linear_infinite]"
+        {/* Stars - Yellow Twinkling — hidden on mobile */}
+        <div className="hidden md:block absolute inset-0 animate-[fly_30s_linear_infinite] will-change-transform"
           style={{
             backgroundImage: 'radial-gradient(1px 1px at 50px 50px, #FFD700 100%, transparent 100%), radial-gradient(1px 1px at 250px 250px, #FFFF00 100%, transparent 100%)',
             backgroundSize: '450px 450px',
@@ -47,12 +47,14 @@ export default function LandingPage() {
           }}
         />
 
-        {/* Comets / Shooting Stars - Reduced visibility */}
-        <div className="absolute -top-20 right-[10%] w-[1px] h-[100px] bg-gradient-to-b from-transparent via-[#25F4EE] to-transparent animate-[comet_4s_infinite_1s] rotate-[25deg] opacity-50"></div>
-        <div className="absolute -top-20 left-[20%] w-[1px] h-[120px] bg-gradient-to-b from-transparent via-[#FE2C55] to-transparent animate-[comet_6s_infinite_3s] -rotate-[15deg] opacity-50"></div>
+        {/* Comets / Shooting Stars - Hidden on mobile for performance */}
+        <div className="hidden md:block absolute -top-20 right-[10%] w-[1px] h-[100px] bg-gradient-to-b from-transparent via-[#25F4EE] to-transparent animate-[comet_4s_infinite_1s] rotate-[25deg] opacity-50"></div>
+        <div className="hidden md:block absolute -top-20 left-[20%] w-[1px] h-[120px] bg-gradient-to-b from-transparent via-[#FE2C55] to-transparent animate-[comet_6s_infinite_3s] -rotate-[15deg] opacity-50"></div>
 
-        {/* Floating Stats Layer */}
-        <FloatingStats variant="landing" />
+        {/* Floating Stats Layer - Hidden on mobile for performance */}
+        <div className="hidden md:block">
+          <FloatingStats variant="landing" />
+        </div>
 
       </div>
 
@@ -65,10 +67,10 @@ export default function LandingPage() {
             <h1 className="text-5xl sm:text-6xl md:text-[8rem] font-black tracking-tighter text-white leading-none select-none relative z-10 mix-blend-screen">
               Organik
             </h1>
-            <h1 className="text-5xl sm:text-6xl md:text-[8rem] font-black tracking-tighter text-[#25F4EE] leading-none select-none absolute top-0 left-0 -translate-x-[2px] -translate-y-[2px] z-0 opacity-80 animate-glitch-cyan">
+            <h1 className="hidden md:block text-5xl sm:text-6xl md:text-[8rem] font-black tracking-tighter text-[#25F4EE] leading-none select-none absolute top-0 left-0 -translate-x-[2px] -translate-y-[2px] z-0 opacity-80 animate-glitch-cyan">
               Organik
             </h1>
-            <h1 className="text-5xl sm:text-6xl md:text-[8rem] font-black tracking-tighter text-[#FE2C55] leading-none select-none absolute top-0 left-0 translate-x-[2px] translate-y-[2px] z-0 opacity-80 animate-glitch-red">
+            <h1 className="hidden md:block text-5xl sm:text-6xl md:text-[8rem] font-black tracking-tighter text-[#FE2C55] leading-none select-none absolute top-0 left-0 translate-x-[2px] translate-y-[2px] z-0 opacity-80 animate-glitch-red">
               Organik
             </h1>
           </div>
@@ -88,7 +90,7 @@ export default function LandingPage() {
 
         {/* CTA Section - Disappears on launch */}
         <div className={`relative group scale-100 z-30 mt-6 sm:mt-8 transition-all duration-500 ${isLaunching ? 'opacity-0 scale-50' : ''}`}>
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-[#25F4EE] to-[#FE2C55] rounded-full blur opacity-50 group-hover:opacity-100 transition duration-500 animate-tilt"></div>
+          <div className="absolute -inset-0.5 bg-gradient-to-r from-[#25F4EE] to-[#FE2C55] rounded-full blur opacity-50 group-hover:opacity-100 transition duration-500 md:animate-tilt"></div>
 
           <Button
             onClick={handleLaunch}

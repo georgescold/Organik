@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { ProfileForm } from "@/components/profile/profile-form";
+import { UserSettingsSection } from "@/components/admin/user-settings-section";
 
 export default async function ProfilePage() {
     const session = await auth();
@@ -56,6 +57,11 @@ export default async function ProfilePage() {
                         syncPostLimit: profile.syncPostLimit || 50
                     }}
                 />
+            </div>
+
+            {/* User Account Settings */}
+            <div className="mt-12">
+                <UserSettingsSection />
             </div>
         </div>
     );

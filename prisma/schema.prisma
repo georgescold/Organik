@@ -31,6 +31,7 @@ model User {
   followerSnapshots FollowerSnapshot[]
   apiKeys         ApiKey[]
   carouselJobs    CarouselJob[]
+  adminPanels     AdminPanel[]
 }
 
 // ============= PASSWORD RESET =============
@@ -108,6 +109,7 @@ model Profile {
   followerSnapshots  FollowerSnapshot[]
   analyticsSnapshots AnalyticsSnapshot[]
   insights           ProfileInsights?  // NEW: Cached learning insights
+  adminPanelLinks    AdminPanelProfile[]
 
   @@index([userId])
   @@index([platform])
@@ -399,11 +401,16 @@ model Image {
   mood            String?
   style           String?
   colors          String?
+  qualityScore    Int?
   filename        String?
   collections     Collection[]
   createdAt       DateTime     @default(now())
 
-  @@index([userId])  // ✅ Fast image listing per user
+  @@index([userId])             // Fast image listing per user
+  @@index([userId, hash])       // Fast duplicate detection on upload
+  @@index([userId, filename])   // Fast filename lookup on upload
+  @@index([qualityScore])       // Fast quality-based sorting
+  @@index([createdAt])          // Fast chronological listing
 }
 
 model Collection {
@@ -415,7 +422,8 @@ model Collection {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId])  // ✅ Fast collection listing per user
+  @@index([userId])       // Track who created the collection
+  @@index([createdAt])    // Fast chronological listing (shared collections)
 }
 
 // ============= API KEYS =============
@@ -500,4 +508,43 @@ model CarouselJob {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ============= ADMIN PANELS (Niche Intelligence) =============
+
+model AdminPanel {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name               String   @default("Mon Panel")
+  productName        String?
+  productDescription String?
+  productUrl         String?
+  targetAudience     String?
+  positioning        String?
+
+  selectedProfiles   AdminPanelProfile[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AdminPanelProfile {
+  id           String     @id @default(cuid())
+  adminPanelId String
+  adminPanel   AdminPanel @relation(fields: [adminPanelId], references: [id], onDelete: Cascade)
+  profileId    String
+  profile      Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  groupLabel   String?
+  sortOrder    Int        @default(0)
+
+  createdAt    DateTime   @default(now())
+
+  @@unique([adminPanelId, profileId])
+  @@index([adminPanelId])
+  @@index([profileId])
 }

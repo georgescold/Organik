@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -25,14 +25,21 @@ export function AddToCollectionDialog({ open, onOpenChange, imageIds }: AddToCol
     const [collections, setCollections] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const cacheRef = useRef<any[] | null>(null);
 
     useEffect(() => {
         if (open) {
-            getUserCollections().then(res => {
-                if (res.success) {
-                    setCollections(res.collections || []);
-                }
-            });
+            if (cacheRef.current) {
+                setCollections(cacheRef.current);
+            } else {
+                getUserCollections().then(res => {
+                    if (res.success) {
+                        const cols = res.collections || [];
+                        setCollections(cols);
+                        cacheRef.current = cols;
+                    }
+                });
+            }
         }
     }, [open]);
 

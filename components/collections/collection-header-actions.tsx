@@ -15,11 +15,11 @@ export function CollectionHeaderActions({ collectionId, currentImageIds }: Colle
     const [openAdd, setOpenAdd] = useState(false);
 
     return (
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {collectionId && (
                 <>
-                    <Button size="sm" onClick={() => setOpenAdd(true)} className="bg-primary hover:bg-primary/90 text-white w-full sm:w-auto">
-                        <PlusCircle className="mr-2 h-4 w-4" />
+                    <Button onClick={() => setOpenAdd(true)} className="bg-primary hover:bg-primary/90 text-white flex-1 sm:flex-none h-10 text-sm touch-manipulation">
+                        <PlusCircle className="mr-1.5 h-4 w-4" />
                         Ajouter des images
                     </Button>
                     <AddExistingImagesDialog
@@ -31,9 +31,9 @@ export function CollectionHeaderActions({ collectionId, currentImageIds }: Colle
                 </>
             )}
 
-            <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
+            <Button variant="outline" asChild className="flex-1 sm:flex-none h-10 text-sm touch-manipulation">
                 <Link href="/api/backup/collections" target="_blank">
-                    <Download className="mr-2 h-4 w-4" />
+                    <Download className="mr-1.5 h-4 w-4" />
                     Tout télécharger
                 </Link>
             </Button>

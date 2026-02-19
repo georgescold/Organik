@@ -202,22 +202,22 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                             {isSelectionMode && (
                                 <div className="absolute top-2 right-2 z-10">
                                     <div className={cn(
-                                        "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors bg-black/50",
+                                        "w-9 h-9 sm:w-7 sm:h-7 rounded-full border-2 flex items-center justify-center transition-colors bg-black/50 touch-manipulation",
                                         isSelected ? "bg-primary border-primary" : "border-white"
                                     )}>
-                                        {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
+                                        {isSelected && <CheckCircle2 className="w-6 h-6 sm:w-5 sm:h-5 text-white" />}
                                     </div>
                                 </div>
                             )}
 
                             {/* Normal Hover Overlay (Hidden in Selection Mode) */}
                             {!isSelectionMode && (
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3">
                                     <div className="absolute top-2 right-2 flex gap-2">
                                         <Button
                                             variant="secondary"
                                             size="icon"
-                                            className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                            className="h-9 w-9 rounded-full md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg touch-manipulation"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setImageToAdd(img.id);
@@ -229,7 +229,7 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                                         <Button
                                             variant="destructive"
                                             size="icon"
-                                            className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                            className="h-9 w-9 rounded-full md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg touch-manipulation"
                                             onClick={(e) => handleDelete(e, img)}
                                             disabled={isPending}
                                             title={collectionId ? "Retirer de la collection" : "Supprimer"}

@@ -61,6 +61,11 @@ export default async function DashboardPage(props: PageProps) {
                                 <span>Mon Profil</span>
                             </Link>
                         </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                            <Link href="/dashboard/admin" className="cursor-pointer">
+                                <span>Admin</span>
+                            </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <LogoutItem logoutAction={SignOutButton} />
                     </DropdownMenuContent>

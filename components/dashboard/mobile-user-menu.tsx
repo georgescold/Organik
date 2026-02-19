@@ -50,13 +50,13 @@ export function MobileUserMenu({ profiles, activeProfileId, logoutAction }: Mobi
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9 sm:h-10 sm:w-10 rounded-full border border-border"
+                    className="h-10 w-10 rounded-full border border-border"
                 >
-                    <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
+                    <Settings className="h-5 w-5" />
                     <span className="sr-only">Menu</span>
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuContent align="end" className="w-64 max-w-[90vw]">
                 {/* Profile Selection - Only on mobile */}
                 <div className="sm:hidden">
                     <DropdownMenuLabel>Profils</DropdownMenuLabel>
@@ -99,6 +99,11 @@ export function MobileUserMenu({ profiles, activeProfileId, logoutAction }: Mobi
                 <DropdownMenuItem asChild>
                     <Link href="/dashboard/profile" className="cursor-pointer">
                         <span>Mon Profil</span>
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link href="/dashboard/admin" className="cursor-pointer">
+                        <span>Admin</span>
                     </Link>
                 </DropdownMenuItem>
 
