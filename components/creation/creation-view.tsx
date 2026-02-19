@@ -731,7 +731,11 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             <div className="grid md:grid-cols-3 gap-6">
                                 {hooks.map((h, i) => (
                                     <Card key={i}
-                                        onClick={() => setSelectedHook(selectedHook?.id === h.id ? null : h)}
+                                        onClick={(e) => {
+                                            // Don't toggle if click came from a button inside
+                                            if ((e.target as HTMLElement).closest('button')) return;
+                                            setSelectedHook(selectedHook?.id === h.id ? null : h);
+                                        }}
                                         className={`cursor-pointer transition-all group bg-card/40 backdrop-blur relative ${replacingIndex === i ? 'opacity-50 pointer-events-none' : ''} ${selectedHook?.id === h.id ? 'border-primary ring-2 ring-primary/30 scale-[1.02]' : selectedHook ? 'opacity-70 md:opacity-50 hover:opacity-80' : 'hover:border-primary hover:scale-105'}`}
                                     >
                                         {/* Reject Button (Red Cross) */}
