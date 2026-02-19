@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { generateHooks, generateCarousel, saveCarousel, getDrafts, updatePostContent, saveHookAsIdea, getSavedIdeas, deletePost, rejectHook, generateReplacementHook, generateVariations, getPost, scoreCarouselBeforePublish, improveCarouselFromScore, HookProposal, Slide } from '@/server/actions/creation-actions';
-import { parseTwemoji, loadTwemojiScript } from '@/lib/use-twemoji';
+// Twemoji is used globally via TwemojiProvider for preview rendering
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
@@ -440,53 +440,60 @@ export function CreationView({ initialPost }: CreationViewProps) {
         const { saveAs } = await import('file-saver');
         const html2canvas = (await import('html2canvas')).default;
 
-        // Ensure Twemoji is loaded for emoji rendering in exported slides
-        try { await loadTwemojiScript(); } catch (e) { console.warn('Twemoji not available for export'); }
-
         try {
             for (const slide of slides) {
                 try {
                     // Create offscreen container at TikTok resolution (1080x1920)
+                    // Use absolute positioning inside a wrapper to avoid html2canvas issues with fixed
+                    const wrapper = document.createElement('div');
+                    wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;width:1080px;height:1920px;overflow:hidden;';
+                    document.body.appendChild(wrapper);
+
                     const container = document.createElement('div');
-                    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:1080px;height:1920px;overflow:hidden;background:#000;';
-                    document.body.appendChild(container);
+                    container.style.cssText = 'position:relative;width:1080px;height:1920px;overflow:hidden;background:#000;';
+                    wrapper.appendChild(container);
 
                     // Background image
                     if (slide.image_url) {
                         const img = document.createElement('img');
                         img.crossOrigin = 'anonymous';
                         img.src = slide.image_url;
-                        img.style.cssText = 'width:100%;height:100%;object-fit:cover;position:absolute;top:0;left:0;';
+                        img.style.cssText = 'width:1080px;height:1920px;object-fit:cover;position:absolute;top:0;left:0;';
                         container.appendChild(img);
-                        await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); });
+                        await new Promise<void>((resolve) => {
+                            img.onload = () => resolve();
+                            img.onerror = () => resolve();
+                            // Fallback timeout in case neither fires
+                            setTimeout(() => resolve(), 5000);
+                        });
                     }
 
-                    // Text overlay
-                    const fullText = slide.text || '';
-                    const isLastSlide = slide.slide_number === slides.length;
-                    const isHook = slide.slide_number === 1;
-                    const paragraphs = isLastSlide
-                        ? [fullText.trim()].filter(Boolean)
-                        : fullText.split(/\n\s*\n/).map((p: string) => p.trim()).filter(Boolean);
-                    const hasSplit = paragraphs.length > 1;
+                    // Text overlay — render ALL text as a single centered block
+                    const fullText = (slide.text || '').trim();
+                    if (fullText) {
+                        const isLastSlide = slide.slide_number === slides.length;
+                        const isHook = slide.slide_number === 1;
 
-                    paragraphs.forEach((paragraph: string, pIdx: number) => {
-                        const len = paragraph.length;
+                        // Calculate font size based on total text length
+                        const totalLen = fullText.length;
                         let fontSize: number;
-                        if (isHook) { fontSize = len > 80 ? 52 : len > 50 ? 60 : 72; }
+                        if (isHook) { fontSize = totalLen > 80 ? 52 : totalLen > 50 ? 60 : 72; }
                         else if (isLastSlide) {
-                            if (len > 250) fontSize = 34;
-                            else if (len > 180) fontSize = 38;
-                            else if (len > 120) fontSize = 44;
-                            else if (len > 80) fontSize = 48;
+                            if (totalLen > 300) fontSize = 30;
+                            else if (totalLen > 250) fontSize = 34;
+                            else if (totalLen > 180) fontSize = 38;
+                            else if (totalLen > 120) fontSize = 44;
+                            else if (totalLen > 80) fontSize = 48;
                             else fontSize = 52;
                         }
-                        else if (pIdx === 0) { fontSize = len > 80 ? 48 : len > 40 ? 52 : 60; }
-                        else { fontSize = len > 60 ? 44 : len > 30 ? 48 : 56; }
+                        else {
+                            if (totalLen > 120) fontSize = 40;
+                            else if (totalLen > 80) fontSize = 48;
+                            else if (totalLen > 40) fontSize = 52;
+                            else fontSize = 60;
+                        }
 
-                        const topOffset = hasSplit ? (pIdx === 0 ? '35%' : '62%') : '50%';
-
-                        // Generate outline shadows at export scale
+                        // Generate outline shadows
                         const outlineW = 5;
                         const shadows: string[] = [];
                         for (let s = 0; s < 24; s++) {
@@ -500,33 +507,15 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         shadows.push('0 3px 8px rgba(0,0,0,0.6)');
 
                         const textDiv = document.createElement('div');
-                        // Use innerHTML to preserve emoji characters for Twemoji parsing
-                        textDiv.innerHTML = paragraph.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        textDiv.style.cssText = `position:absolute;left:40px;right:40px;top:${topOffset};transform:translateY(-50%);text-align:center;color:#fff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1.5;text-shadow:${shadows.join(',')};word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;`;
+                        // Escape HTML but keep newlines as <br> for proper line breaks
+                        const escapedText = fullText
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/\n/g, '<br>');
+                        textDiv.innerHTML = escapedText;
+                        textDiv.style.cssText = `position:absolute;left:40px;right:40px;top:50%;transform:translateY(-50%);text-align:center;color:#fff;font-family:'Montserrat','Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1.5;text-shadow:${shadows.join(',')};word-wrap:break-word;overflow-wrap:break-word;`;
                         container.appendChild(textDiv);
-
-                        // Parse emojis with Twemoji to render as SVG (Apple-style)
-                        parseTwemoji(textDiv);
-                    });
-
-                    // Style Twemoji images inline for html2canvas and wait for them to load
-                    const emojiImgs = container.querySelectorAll('img.emoji');
-                    emojiImgs.forEach((img) => {
-                        const el = img as HTMLElement;
-                        el.style.cssText = 'height:1em;width:1em;margin:0 .05em 0 .1em;vertical-align:-0.1em;display:inline;';
-                    });
-                    // Wait for all emoji SVGs to be fully loaded
-                    if (emojiImgs.length > 0) {
-                        await Promise.all(
-                            Array.from(emojiImgs).map((img) =>
-                                new Promise<void>((resolve) => {
-                                    const imgEl = img as HTMLImageElement;
-                                    if (imgEl.complete) return resolve();
-                                    imgEl.onload = () => resolve();
-                                    imgEl.onerror = () => resolve();
-                                })
-                            )
-                        );
                     }
 
                     // Render with html2canvas
@@ -535,7 +524,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         useCORS: true, allowTaint: true, backgroundColor: '#000',
                     });
 
-                    document.body.removeChild(container);
+                    document.body.removeChild(wrapper);
 
                     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 1));
                     if (blob) {
@@ -1274,9 +1263,20 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                             if (!selected.length) { toast.error("Selectionnez au moins une amelioration"); return; }
                                             setIsImproving(true);
                                             startTransition(async () => {
-                                                const res = await improveCarouselFromScore(selectedHook?.hook || '', slides, selected, predictiveScore.scores);
-                                                if (res.success && res.slides) { setSlides(res.slides); setPredictiveScore(null); setSelectedImprovements(new Set()); toast.success("Carrousel ameliore !"); }
-                                                else toast.error(res.error || "Erreur lors de l'amelioration");
+                                                try {
+                                                    const res = await improveCarouselFromScore(selectedHook?.hook || '', slides, selected, predictiveScore.scores);
+                                                    if (res.success && res.slides) {
+                                                        setSlides(res.slides);
+                                                        setPredictiveScore(null);
+                                                        setSelectedImprovements(new Set());
+                                                        toast.success("Carrousel ameliore !");
+                                                    } else {
+                                                        toast.error(res.error || "Erreur lors de l'amelioration. Reessayez.");
+                                                    }
+                                                } catch (e: any) {
+                                                    console.error("Improve failed:", e);
+                                                    toast.error("Erreur temporaire. Reessayez dans quelques secondes.");
+                                                }
                                                 setIsImproving(false);
                                             });
                                         }}
