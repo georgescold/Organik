@@ -9,9 +9,9 @@ import { parseTwemoji, loadTwemojiScript } from '@/lib/use-twemoji';
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, Check, RefreshCw, FileText, Clock, ArrowRight, Bookmark, Lightbulb, User, Trash, Image as ImageIcon, X, Target, Copy, Wand2, RefreshCcw } from 'lucide-react';
+import { Loader2, Sparkles, Check, RefreshCw, FileText, Clock, ArrowRight, Bookmark, Lightbulb, User, Trash, Image as ImageIcon, X, Target, Copy, Wand2, RefreshCcw, Download } from 'lucide-react';
 import { PostCopyModal } from './post-copy-modal';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 // file-saver is lazy-loaded in handleDownloadImages to reduce bundle
 import { CarouselEditor } from '@/components/smart-carousel/carousel-editor';
 import type { EditorSlide, TextLayer, UserImage } from '@/types/post';
@@ -49,6 +49,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [isImproving, setIsImproving] = useState(false);
     const [selectedImprovements, setSelectedImprovements] = useState<Set<number>>(new Set());
     const [generationPhase, setGenerationPhase] = useState<'idle' | 'generating' | 'scoring' | 'improving'>('idle');
+    const [showConfirmSave, setShowConfirmSave] = useState(false);
     const inlineConfigRef = useRef<HTMLDivElement>(null);
 
     // Convert current slides to EditorSlide format for the Canva editor
@@ -1113,12 +1114,51 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             <span className="truncate">Sauvegarder Brouillon</span>
                         </Button>
                     )}
-                    <Button onClick={() => handleSave(false)} disabled={isPending} className="bg-secondary text-white hover:bg-secondary/90 flex-1 md:flex-none">
+                    <Button onClick={() => initialPost ? handleSave(false) : setShowConfirmSave(true)} disabled={isPending} className="bg-secondary text-white hover:bg-secondary/90 flex-1 md:flex-none">
                         {isPending ? <Loader2 className="animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                         {initialPost ? 'Enregistrer' : 'Valider'}
                     </Button>
                 </div>
             </div>
+
+            {/* Confirmation Dialog before saving */}
+            <Dialog open={showConfirmSave} onOpenChange={setShowConfirmSave}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Confirmer la création</DialogTitle>
+                        <DialogDescription>
+                            As-tu bien téléchargé les images de tes slides avant de valider ? Une fois validé, le post sera marqué comme créé.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-3 py-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                handleDownloadImages();
+                            }}
+                            className="w-full gap-2"
+                        >
+                            <Download className="h-4 w-4" />
+                            Télécharger les slides
+                        </Button>
+                    </div>
+                    <DialogFooter className="flex-col sm:flex-row gap-2">
+                        <Button variant="ghost" onClick={() => setShowConfirmSave(false)} className="flex-1">
+                            Annuler
+                        </Button>
+                        <Button
+                            onClick={() => {
+                                setShowConfirmSave(false);
+                                handleSave(false);
+                            }}
+                            className="flex-1 bg-secondary text-white hover:bg-secondary/90 gap-2"
+                        >
+                            <Check className="h-4 w-4" />
+                            Oui, valider le post
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Predictive Score */}
             {predictiveScore && (() => {
