@@ -1357,8 +1357,12 @@ If no contradiction, respond with JSON: {"contradiction": false}`
         }),
         prisma.image.findMany({
             where: {
-                userId: finalUserId,
-                ...(collectionId && collectionId !== 'all' ? { collections: { some: { id: collectionId } } } : {})
+                // When a specific collection is selected, don't filter by userId (collections are shared)
+                // When "all" is selected, only show the user's own images
+                ...(collectionId && collectionId !== 'all'
+                    ? { collections: { some: { id: collectionId } } }
+                    : { userId: finalUserId }
+                )
             },
             select: { id: true, humanId: true, descriptionLong: true, keywords: true, mood: true, style: true, colors: true, qualityScore: true, storageUrl: true }
         })
