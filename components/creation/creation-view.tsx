@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { generateHooks, generateCarousel, saveCarousel, getDrafts, updatePostContent, saveHookAsIdea, getSavedIdeas, deletePost, rejectHook, generateReplacementHook, generateVariations, getPost, scoreCarouselBeforePublish, improveCarouselFromScore, HookProposal, Slide } from '@/server/actions/creation-actions';
-// Twemoji is used globally via TwemojiProvider for preview rendering
+import { parseTwemoji } from '@/lib/use-twemoji';
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
@@ -51,6 +51,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [generationPhase, setGenerationPhase] = useState<'idle' | 'generating' | 'scoring' | 'improving'>('idle');
     const [showConfirmSave, setShowConfirmSave] = useState(false);
     const inlineConfigRef = useRef<HTMLDivElement>(null);
+    const slidesPreviewRef = useRef<HTMLDivElement>(null);
 
     // Convert current slides to EditorSlide format for the Canva editor
     // Splits text on double newlines into separate layers for TikTok-like layout
@@ -263,6 +264,17 @@ export function CreationView({ initialPost }: CreationViewProps) {
         }
     }, [selectedHook]);
 
+    // Force Twemoji parsing on slide preview after slides change
+    useEffect(() => {
+        if (slides.length > 0 && slidesPreviewRef.current) {
+            // Small delay to let React render, then parse emojis
+            const timer = setTimeout(() => {
+                parseTwemoji(slidesPreviewRef.current);
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [slides]);
+
     const handleOpenImagePicker = async (index: number) => {
         setPickingSlideIndex(index);
         setIsImagePickerOpen(true);
@@ -447,7 +459,9 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     const canvas = document.createElement('canvas');
                     canvas.width = W;
                     canvas.height = H;
-                    const ctx = canvas.getContext('2d')!;
+                    const ctx = canvas.getContext('2d', { alpha: false })!;
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
 
                     // Black background
                     ctx.fillStyle = '#000';
@@ -1421,7 +1435,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 </DialogContent>
             </Dialog>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+            <div ref={slidesPreviewRef} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {slides.map((slide, index) => {
                     // Split text into paragraphs for TikTok-like overlay rendering
                     // Don't split the last slide (CTA) — it stays as a single block
