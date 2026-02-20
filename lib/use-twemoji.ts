@@ -34,7 +34,7 @@ export function loadTwemojiScript(): Promise<void> {
     return twemojiLoading;
 }
 
-/** Parse a specific DOM element with Twemoji */
+/** Parse a specific DOM element with Twemoji (sync — requires script already loaded) */
 export function parseTwemoji(element?: HTMLElement | null) {
     const tw = (window as any).twemoji;
     if (!tw || !element) return;
@@ -44,6 +44,13 @@ export function parseTwemoji(element?: HTMLElement | null) {
         ext: '.svg',
         base: 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/',
     });
+}
+
+/** Parse a specific DOM element with Twemoji, loading script first if needed */
+export async function parseTwemojiAsync(element?: HTMLElement | null) {
+    if (!element) return;
+    await loadTwemojiScript();
+    parseTwemoji(element);
 }
 
 /**

@@ -5,16 +5,70 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { generateHooks, generateCarousel, saveCarousel, getDrafts, updatePostContent, saveHookAsIdea, getSavedIdeas, deletePost, rejectHook, generateReplacementHook, generateVariations, getPost, scoreCarouselBeforePublish, improveCarouselFromScore, HookProposal, Slide } from '@/server/actions/creation-actions';
-import { parseTwemoji } from '@/lib/use-twemoji';
+import { parseTwemojiAsync } from '@/lib/use-twemoji';
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
-import { Loader2, Sparkles, Check, RefreshCw, FileText, Clock, ArrowRight, Bookmark, Lightbulb, User, Trash, Image as ImageIcon, X, Target, Copy, Wand2, RefreshCcw, Download } from 'lucide-react';
+import { Loader2, Sparkles, Check, RefreshCw, FileText, Clock, ArrowRight, Bookmark, Lightbulb, User, Trash, Image as ImageIcon, X, Target, Copy, Wand2, RefreshCcw, Download, Undo2 } from 'lucide-react';
 import { PostCopyModal } from './post-copy-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 // file-saver is lazy-loaded in handleDownloadImages to reduce bundle
 import { CarouselEditor } from '@/components/smart-carousel/carousel-editor';
 import type { EditorSlide, TextLayer, UserImage } from '@/types/post';
+
+/**
+ * Estimate the rendered height of a text block as a percentage of the canvas.
+ * Uses word-wrap estimation to count lines, then converts to % of canvas height.
+ */
+function estimateTextHeightPercent(text: string, fontSize: number, lineHeight: number, maxWidth: number): number {
+    const avgCharWidth = fontSize * 0.55; // Montserrat Bold approx
+    const charsPerLine = Math.max(1, Math.floor(maxWidth / avgCharWidth));
+    const words = text.split(/\s+/);
+    let lines = 1;
+    let currentLen = 0;
+    for (const word of words) {
+        if (currentLen + word.length > charsPerLine && currentLen > 0) {
+            lines++;
+            currentLen = word.length;
+        } else {
+            currentLen += (currentLen > 0 ? 1 : 0) + word.length;
+        }
+    }
+    // Editor canvas is ~350px wide at 9:16 → ~622px tall
+    const heightPx = lines * fontSize * lineHeight;
+    return (heightPx / 622) * 100;
+}
+
+/**
+ * Detect overlapping text layers and redistribute them vertically.
+ * Called after initial positioning to ensure no text blocks overlap.
+ */
+function fixTextOverlaps(layers: import('@/types/post').TextLayer[]): void {
+    if (layers.length < 2) return;
+    // Sort by y position (topmost first)
+    const sorted = [...layers].sort((a, b) => a.y - b.y);
+    for (let i = 0; i < sorted.length - 1; i++) {
+        const a = sorted[i];
+        const b = sorted[i + 1];
+        const aH = estimateTextHeightPercent(a.content, a.fontSize, a.lineHeight || 1.5, a.maxWidth || 300);
+        const bH = estimateTextHeightPercent(b.content, b.fontSize, b.lineHeight || 1.5, b.maxWidth || 300);
+        const aBottom = a.y + aH / 2;
+        const bTop = b.y - bH / 2;
+        const gap = 3; // minimum 3% gap
+        if (aBottom + gap > bTop) {
+            // Overlap detected — push blocks apart symmetrically
+            const totalNeeded = aH / 2 + gap + bH / 2;
+            const center = (a.y + b.y) / 2;
+            const newAy = Math.max(aH / 2 + 2, center - totalNeeded / 2);
+            const newBy = Math.min(100 - bH / 2 - 2, center + totalNeeded / 2);
+            // Update the original layer references
+            const layerA = layers.find(l => l.id === a.id);
+            const layerB = layers.find(l => l.id === b.id);
+            if (layerA) layerA.y = newAy;
+            if (layerB) layerB.y = newBy;
+        }
+    }
+}
 
 interface CreationViewProps {
     initialPost?: {
@@ -48,6 +102,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [isScoring, setIsScoring] = useState(false);
     const [isImproving, setIsImproving] = useState(false);
     const [selectedImprovements, setSelectedImprovements] = useState<Set<number>>(new Set());
+    const [appliedImprovements, setAppliedImprovements] = useState<Set<number>>(new Set());
+    const [slidesBeforeImprove, setSlidesBeforeImprove] = useState<Slide[] | null>(null);
     const [generationPhase, setGenerationPhase] = useState<'idle' | 'generating' | 'scoring' | 'improving'>('idle');
     const [showConfirmSave, setShowConfirmSave] = useState(false);
     const inlineConfigRef = useRef<HTMLDivElement>(null);
@@ -107,6 +163,9 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     textMode: 'outline' as const,
                 };
             });
+
+            // Detect and fix overlapping text layers
+            fixTextOverlaps(layers);
 
             return {
                 id: String(slide.slide_number),
@@ -265,12 +324,12 @@ export function CreationView({ initialPost }: CreationViewProps) {
     }, [selectedHook]);
 
     // Force Twemoji parsing on slide preview after slides change
+    // Uses async version to ensure Twemoji script is loaded first
     useEffect(() => {
         if (slides.length > 0 && slidesPreviewRef.current) {
-            // Small delay to let React render, then parse emojis
             const timer = setTimeout(() => {
-                parseTwemoji(slidesPreviewRef.current);
-            }, 100);
+                parseTwemojiAsync(slidesPreviewRef.current);
+            }, 150);
             return () => clearTimeout(timer);
         }
     }, [slides]);
@@ -1264,34 +1323,41 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         )}
 
                         {/* Improvements */}
-                        {predictiveScore.improvements?.length > 0 && (
+                        {predictiveScore.improvements?.length > 0 && (() => {
+                            // Filter out already-applied improvements
+                            const remaining = predictiveScore.improvements
+                                .map((tip: string, i: number) => ({ tip, originalIdx: i }))
+                                .filter(({ originalIdx }: { originalIdx: number }) => !appliedImprovements.has(originalIdx));
+                            if (remaining.length === 0) return null;
+                            return (
                             <>
                                 <div className="border-t border-border/30 px-4 pt-3 pb-2">
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[11px] font-medium text-muted-foreground">Ameliorations</span>
+                                        <span className="text-[11px] font-medium text-muted-foreground">Ameliorations ({remaining.length})</span>
                                         <button className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                                             onClick={() => {
-                                                const allIdxs = predictiveScore.improvements.map((_: string, i: number) => i);
-                                                setSelectedImprovements(prev => prev.size === predictiveScore.improvements.length ? new Set() : new Set(allIdxs));
+                                                const allIdxs = remaining.map(({ originalIdx }: { originalIdx: number }) => originalIdx);
+                                                const allSelected = allIdxs.every((idx: number) => selectedImprovements.has(idx));
+                                                setSelectedImprovements(allSelected ? new Set() : new Set(allIdxs));
                                             }}>
-                                            {selectedImprovements.size === predictiveScore.improvements.length ? 'Deselectionner' : 'Tout selectionner'}
+                                            {remaining.every(({ originalIdx }: { originalIdx: number }) => selectedImprovements.has(originalIdx)) ? 'Deselectionner' : 'Tout selectionner'}
                                         </button>
                                     </div>
                                     <div className="space-y-1">
-                                        {predictiveScore.improvements.map((tip: string, i: number) => (
-                                            <button key={i}
-                                                onClick={() => setSelectedImprovements(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; })}
+                                        {remaining.map(({ tip, originalIdx }: { tip: string; originalIdx: number }) => (
+                                            <button key={originalIdx}
+                                                onClick={() => setSelectedImprovements(prev => { const n = new Set(prev); n.has(originalIdx) ? n.delete(originalIdx) : n.add(originalIdx); return n; })}
                                                 className={`w-full text-left text-[11px] leading-relaxed flex items-start gap-2 px-2.5 py-2 rounded-lg transition-colors ${
-                                                    selectedImprovements.has(i) ? 'bg-white/5' : 'hover:bg-white/[0.02]'
+                                                    selectedImprovements.has(originalIdx) ? 'bg-white/5' : 'hover:bg-white/[0.02]'
                                                 }`}>
                                                 <div className={`flex-shrink-0 w-3.5 h-3.5 rounded-[4px] mt-0.5 border transition-colors flex items-center justify-center ${
-                                                    selectedImprovements.has(i) ? 'border-primary bg-primary' : 'border-border/40'
+                                                    selectedImprovements.has(originalIdx) ? 'border-primary bg-primary' : 'border-border/40'
                                                 }`}>
-                                                    {selectedImprovements.has(i) && (
+                                                    {selectedImprovements.has(originalIdx) && (
                                                         <svg className="w-2 h-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                                                     )}
                                                 </div>
-                                                <span className={selectedImprovements.has(i) ? 'text-foreground/90' : 'text-muted-foreground/70'}>{cleanDash(tip)}</span>
+                                                <span className={selectedImprovements.has(originalIdx) ? 'text-foreground/90' : 'text-muted-foreground/70'}>{cleanDash(tip)}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1304,17 +1370,24 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                             setIsImproving(true);
                                             startTransition(async () => {
                                                 try {
+                                                    // Save current slides for undo
+                                                    setSlidesBeforeImprove([...slides]);
                                                     const res = await improveCarouselFromScore(selectedHook?.hook || '', slides, selected, predictiveScore.scores);
                                                     if (res.success && res.slides) {
                                                         setSlides(res.slides);
-                                                        setPredictiveScore(null);
+                                                        // Mark applied improvements (keep original list, hide applied visually)
+                                                        const newApplied = new Set(appliedImprovements);
+                                                        selectedImprovements.forEach(i => newApplied.add(i));
+                                                        setAppliedImprovements(newApplied);
                                                         setSelectedImprovements(new Set());
                                                         toast.success("Carrousel ameliore !");
                                                     } else {
+                                                        setSlidesBeforeImprove(null);
                                                         toast.error(res.error || "Erreur lors de l'amelioration. Reessayez.");
                                                     }
                                                 } catch (e: any) {
                                                     console.error("Improve failed:", e);
+                                                    setSlidesBeforeImprove(null);
                                                     toast.error("Erreur temporaire. Reessayez dans quelques secondes.");
                                                 }
                                                 setIsImproving(false);
@@ -1327,9 +1400,25 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                         {isImproving ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Optimisation...</> :
                                             <><Sparkles className="w-3.5 h-3.5 mr-1.5" />Appliquer{selectedImprovements.size > 0 ? ` (${selectedImprovements.size})` : ''}</>}
                                     </Button>
+                                    {slidesBeforeImprove && (
+                                        <Button
+                                            onClick={() => {
+                                                setSlides(slidesBeforeImprove);
+                                                setSlidesBeforeImprove(null);
+                                                setAppliedImprovements(new Set());
+                                                toast.success("Retour en arriere effectue");
+                                            }}
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full mt-1.5 border-border/30 text-muted-foreground hover:text-foreground"
+                                        >
+                                            <Undo2 className="w-3.5 h-3.5 mr-1.5" />Annuler l&apos;amelioration
+                                        </Button>
+                                    )}
                                 </div>
                             </>
-                        )}
+                            );
+                        })()}
                     </div>
                 );
             })()}
@@ -1478,6 +1567,36 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         });
                     };
 
+                    // Smart paragraph positioning: estimate heights and avoid overlap
+                    const paragraphPositions: string[] = [];
+                    if (hasSplit && paragraphs.length > 1) {
+                        const fontSizes = paragraphs.map((p, pi) =>
+                            getAutoFontSize(p, pi === 0, index === 0 && pi === 0, isLastSlide)
+                        );
+                        // Estimate each block height as % of container (~200px wide preview)
+                        const containerW = 200;
+                        const containerH = containerW * 16 / 9;
+                        const heights = paragraphs.map((p, pi) => {
+                            const fs = fontSizes[pi];
+                            const avgCW = fs * 0.55;
+                            const cpl = Math.max(1, Math.floor((containerW - 24) / avgCW));
+                            const words = p.split(/\s+/);
+                            let lines = 1, cur = 0;
+                            for (const w of words) { if (cur + w.length > cpl && cur > 0) { lines++; cur = w.length; } else { cur += (cur > 0 ? 1 : 0) + w.length; } }
+                            return lines * fs * 1.5;
+                        });
+                        const gap = 8;
+                        const totalH = heights.reduce((a, b) => a + b, 0) + gap * (heights.length - 1);
+                        let startY = (containerH - totalH) / 2;
+                        for (let pi = 0; pi < heights.length; pi++) {
+                            const center = startY + heights[pi] / 2;
+                            paragraphPositions.push(`${Math.max(8, Math.min(92, (center / containerH) * 100))}%`);
+                            startY += heights[pi] + gap;
+                        }
+                    } else {
+                        paragraphs.forEach(() => paragraphPositions.push('50%'));
+                    }
+
                     return (
                         <Card key={`${slide.slide_number}-${index}`} className="overflow-hidden border-border/50 bg-card/30 flex flex-col group/card relative">
                             {/* Delete Button */}
@@ -1513,10 +1632,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                     {paragraphs.length > 0 ? paragraphs.map((paragraph, pIdx) => {
                                         const isLastSlide = index === slides.length - 1;
                                         const fontSize = getAutoFontSize(paragraph, pIdx === 0, index === 0 && pIdx === 0, isLastSlide);
-                                        // Position: spread paragraphs vertically
-                                        const topOffset = hasSplit
-                                            ? pIdx === 0 ? '35%' : '62%'
-                                            : '50%';
+                                        const topOffset = paragraphPositions[pIdx] || '50%';
 
                                         // Generate TikTok-authentic outline text-shadow (3-ring system like real TikTok)
                                         const outlineW = index === 0 && pIdx === 0 ? 1.5 : 1.5;
