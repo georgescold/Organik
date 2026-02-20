@@ -438,44 +438,57 @@ export function CreationView({ initialPost }: CreationViewProps) {
         let downloadedCount = 0;
         const loadingToast = toast.loading("Téléchargement des slides...");
         const { saveAs } = await import('file-saver');
-        const html2canvas = (await import('html2canvas')).default;
+
+        const W = 1080, H = 1920;
 
         try {
             for (const slide of slides) {
                 try {
-                    // Create offscreen container at TikTok resolution (1080x1920)
-                    // Use absolute positioning inside a wrapper to avoid html2canvas issues with fixed
-                    const wrapper = document.createElement('div');
-                    wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;width:1080px;height:1920px;overflow:hidden;';
-                    document.body.appendChild(wrapper);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = W;
+                    canvas.height = H;
+                    const ctx = canvas.getContext('2d')!;
 
-                    const container = document.createElement('div');
-                    container.style.cssText = 'position:relative;width:1080px;height:1920px;overflow:hidden;background:#000;';
-                    wrapper.appendChild(container);
+                    // Black background
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, W, H);
 
-                    // Background image
+                    // Background image — draw with object-fit:cover logic
                     if (slide.image_url) {
-                        const img = document.createElement('img');
-                        img.crossOrigin = 'anonymous';
-                        img.src = slide.image_url;
-                        img.style.cssText = 'width:1080px;height:1920px;object-fit:cover;position:absolute;top:0;left:0;';
-                        container.appendChild(img);
-                        await new Promise<void>((resolve) => {
-                            img.onload = () => resolve();
-                            img.onerror = () => resolve();
-                            // Fallback timeout in case neither fires
-                            setTimeout(() => resolve(), 5000);
-                        });
+                        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+                            const i = new Image();
+                            i.crossOrigin = 'anonymous';
+                            i.onload = () => resolve(i);
+                            i.onerror = () => reject(new Error('Image load failed'));
+                            i.src = slide.image_url!;
+                            setTimeout(() => reject(new Error('Image timeout')), 8000);
+                        }).catch(() => null);
+
+                        if (img) {
+                            // object-fit:cover — scale to fill then center-crop
+                            const imgRatio = img.naturalWidth / img.naturalHeight;
+                            const canvasRatio = W / H;
+                            let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+                            if (imgRatio > canvasRatio) {
+                                // Image is wider — crop sides
+                                sw = img.naturalHeight * canvasRatio;
+                                sx = (img.naturalWidth - sw) / 2;
+                            } else {
+                                // Image is taller — crop top/bottom
+                                sh = img.naturalWidth / canvasRatio;
+                                sy = (img.naturalHeight - sh) / 2;
+                            }
+                            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+                        }
                     }
 
-                    // Text overlay — render ALL text as a single centered block
+                    // Text overlay
                     const fullText = (slide.text || '').trim();
                     if (fullText) {
                         const isLastSlide = slide.slide_number === slides.length;
                         const isHook = slide.slide_number === 1;
-
-                        // Calculate font size based on total text length
                         const totalLen = fullText.length;
+
                         let fontSize: number;
                         if (isHook) { fontSize = totalLen > 80 ? 52 : totalLen > 50 ? 60 : 72; }
                         else if (isLastSlide) {
@@ -485,46 +498,60 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             else if (totalLen > 120) fontSize = 44;
                             else if (totalLen > 80) fontSize = 48;
                             else fontSize = 52;
-                        }
-                        else {
+                        } else {
                             if (totalLen > 120) fontSize = 40;
                             else if (totalLen > 80) fontSize = 48;
                             else if (totalLen > 40) fontSize = 52;
                             else fontSize = 60;
                         }
 
-                        // Generate outline shadows
-                        const outlineW = 5;
-                        const shadows: string[] = [];
-                        for (let s = 0; s < 24; s++) {
-                            const a = (2 * Math.PI * s) / 24;
-                            shadows.push(`${(Math.cos(a) * outlineW).toFixed(1)}px ${(Math.sin(a) * outlineW).toFixed(1)}px 0 #000`);
-                        }
-                        for (let s = 0; s < 16; s++) {
-                            const a = (2 * Math.PI * s) / 16;
-                            shadows.push(`${(Math.cos(a) * outlineW * 0.75).toFixed(1)}px ${(Math.sin(a) * outlineW * 0.75).toFixed(1)}px 0 #000`);
-                        }
-                        shadows.push('0 3px 8px rgba(0,0,0,0.6)');
+                        const padding = 50;
+                        const maxTextW = W - padding * 2;
+                        const lineH = fontSize * 1.5;
 
-                        const textDiv = document.createElement('div');
-                        // Escape HTML but keep newlines as <br> for proper line breaks
-                        const escapedText = fullText
-                            .replace(/&/g, '&amp;')
-                            .replace(/</g, '&lt;')
-                            .replace(/>/g, '&gt;')
-                            .replace(/\n/g, '<br>');
-                        textDiv.innerHTML = escapedText;
-                        textDiv.style.cssText = `position:absolute;left:40px;right:40px;top:50%;transform:translateY(-50%);text-align:center;color:#fff;font-family:'Montserrat','Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-weight:700;font-size:${fontSize}px;line-height:1.5;text-shadow:${shadows.join(',')};word-wrap:break-word;overflow-wrap:break-word;`;
-                        container.appendChild(textDiv);
+                        ctx.font = `700 ${fontSize}px Montserrat, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'top';
+
+                        // Word-wrap text into lines
+                        const lines: string[] = [];
+                        const rawLines = fullText.split('\n');
+                        for (const rawLine of rawLines) {
+                            if (!rawLine.trim()) { lines.push(''); continue; }
+                            const words = rawLine.split(' ');
+                            let current = '';
+                            for (const word of words) {
+                                const test = current ? `${current} ${word}` : word;
+                                if (ctx.measureText(test).width > maxTextW && current) {
+                                    lines.push(current);
+                                    current = word;
+                                } else {
+                                    current = test;
+                                }
+                            }
+                            if (current) lines.push(current);
+                        }
+
+                        const totalTextH = lines.length * lineH;
+                        const startY = (H - totalTextH) / 2;
+
+                        // Draw each line with outline + fill
+                        for (let li = 0; li < lines.length; li++) {
+                            const y = startY + li * lineH;
+                            const x = W / 2;
+
+                            // Black outline (stroke text multiple times)
+                            ctx.strokeStyle = '#000';
+                            ctx.lineWidth = 10;
+                            ctx.lineJoin = 'round';
+                            ctx.miterLimit = 2;
+                            ctx.strokeText(lines[li], x, y);
+
+                            // White fill
+                            ctx.fillStyle = '#fff';
+                            ctx.fillText(lines[li], x, y);
+                        }
                     }
-
-                    // Render with html2canvas
-                    const canvas = await html2canvas(container, {
-                        width: 1080, height: 1920, scale: 1,
-                        useCORS: true, allowTaint: true, backgroundColor: '#000',
-                    });
-
-                    document.body.removeChild(wrapper);
 
                     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 1));
                     if (blob) {
@@ -532,9 +559,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         downloadedCount++;
                     }
 
-                    // Small delay between downloads
                     if (slide.slide_number < slides.length) {
-                        await new Promise(r => setTimeout(r, 300));
+                        await new Promise(r => setTimeout(r, 200));
                     }
                 } catch (err) {
                     console.error(`Failed to export slide ${slide.slide_number}`, err);
