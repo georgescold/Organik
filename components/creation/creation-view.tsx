@@ -572,25 +572,31 @@ export function CreationView({ initialPost }: CreationViewProps) {
         const loadingToast = toast.loading("Téléchargement des slides...");
         const { saveAs } = await import('file-saver');
 
+        const edCanvasW = savedEditorData?.canvasW || 360;
+        const edCanvasH = savedEditorData?.canvasH || 640;
+
         try {
-            for (const slide of slides) {
+            for (let si = 0; si < slides.length; si++) {
+                const slide = slides[si];
+                const editorSlide = savedEditorData?.slides[si];
+
                 try {
-                    // Load image first to preserve its original dimensions
+                    // Load image to get native dimensions
+                    const imageUrl = editorSlide?.backgroundImage?.imageUrl || slide.image_url;
                     let img: HTMLImageElement | null = null;
-                    if (slide.image_url) {
+                    if (imageUrl) {
                         img = await new Promise<HTMLImageElement>((resolve, reject) => {
                             const i = new Image();
                             i.crossOrigin = 'anonymous';
                             i.onload = () => resolve(i);
                             i.onerror = () => reject(new Error('Image load failed'));
-                            i.src = slide.image_url!;
-                            setTimeout(() => reject(new Error('Image timeout')), 8000);
+                            i.src = imageUrl;
+                            setTimeout(() => reject(new Error('Image timeout')), 10000);
                         }).catch(() => null);
                     }
 
-                    // Use image's native dimensions — no cropping, no stretching
                     const W = img ? img.naturalWidth : 1080;
-                    const H = img ? img.naturalHeight : 1080;
+                    const H = img ? img.naturalHeight : 1920;
 
                     const canvas = document.createElement('canvas');
                     canvas.width = W;
@@ -599,98 +605,212 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     ctx.imageSmoothingEnabled = true;
                     ctx.imageSmoothingQuality = 'high';
 
-                    // Black background
-                    ctx.fillStyle = '#000';
+                    // Background color
+                    ctx.fillStyle = editorSlide?.backgroundColor || '#000';
                     ctx.fillRect(0, 0, W, H);
 
-                    // Draw image 1:1 — preserves original format and quality
+                    // Draw background image
                     if (img) {
-                        ctx.drawImage(img, 0, 0, W, H);
+                        ctx.save();
+
+                        // Apply filters if editor data available
+                        if (editorSlide?.backgroundImage?.filter) {
+                            const f = editorSlide.backgroundImage.filter;
+                            const fp: string[] = [];
+                            if (f.brightness !== 100) fp.push(`brightness(${f.brightness}%)`);
+                            if (f.contrast !== 100) fp.push(`contrast(${f.contrast}%)`);
+                            if (f.blur > 0) {
+                                const exportBlur = Math.round(f.blur * (W / edCanvasW));
+                                fp.push(`blur(${exportBlur}px)`);
+                            }
+                            if (f.saturate != null && f.saturate !== 100) fp.push(`saturate(${f.saturate}%)`);
+                            if (f.hueRotate != null && f.hueRotate !== 0) fp.push(`hue-rotate(${f.hueRotate}deg)`);
+                            if (f.sepia != null && f.sepia > 0) fp.push(`sepia(${f.sepia}%)`);
+                            if (fp.length > 0) ctx.filter = fp.join(' ');
+                        }
+
+                        // Apply zoom/scale
+                        const bgScale = editorSlide?.backgroundImage?.scale || 1;
+                        if (bgScale !== 1) {
+                            const drawW = W * bgScale;
+                            const drawH = H * bgScale;
+                            ctx.drawImage(img, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
+                        } else {
+                            ctx.drawImage(img, 0, 0, W, H);
+                        }
+                        ctx.restore();
                     }
 
-                    // Text overlay — scale font relative to image width
-                    const fullText = (slide.text || '').trim();
-                    if (fullText) {
-                        const scale = W / 1080; // font sizes calibrated for 1080px width
-                        const isLastSlide = slide.slide_number === slides.length;
-                        const isHook = slide.slide_number === 1;
-                        const totalLen = fullText.length;
+                    // ── Rich export from EditorSlide data ──
+                    if (editorSlide) {
+                        const scaleX = W / edCanvasW;
+                        const scaleY = H / edCanvasH;
 
-                        let baseFontSize: number;
-                        if (isHook) { baseFontSize = totalLen > 80 ? 52 : totalLen > 50 ? 60 : 72; }
-                        else if (isLastSlide) {
-                            if (totalLen > 300) baseFontSize = 30;
-                            else if (totalLen > 250) baseFontSize = 34;
-                            else if (totalLen > 180) baseFontSize = 38;
-                            else if (totalLen > 120) baseFontSize = 44;
-                            else if (totalLen > 80) baseFontSize = 48;
-                            else baseFontSize = 52;
-                        } else {
-                            if (totalLen > 120) baseFontSize = 40;
-                            else if (totalLen > 80) baseFontSize = 48;
-                            else if (totalLen > 40) baseFontSize = 52;
-                            else baseFontSize = 60;
-                        }
+                        for (const layer of editorSlide.layers) {
+                            if (layer.type !== 'text') continue;
+                            const tl = layer as TextLayer;
 
-                        const fontSize = Math.round(baseFontSize * scale);
-                        const padding = Math.round(50 * scale);
-                        const maxTextW = W - padding * 2;
-                        const lineH = fontSize * 1.5;
+                            const fontSize = Math.round(tl.fontSize * scaleX);
+                            const posX = (tl.x / 100) * W;
+                            const posY = (tl.y / 100) * H;
+                            const maxW = (tl.maxWidth || 300) * scaleX;
 
-                        ctx.font = `700 ${fontSize}px Montserrat, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'top';
+                            ctx.save();
+                            ctx.translate(posX, posY);
+                            if (tl.rotation) ctx.rotate((tl.rotation * Math.PI) / 180);
+                            ctx.globalAlpha = (tl.opacity ?? 100) / 100;
 
-                        // Word-wrap text into lines
-                        const lines: string[] = [];
-                        const rawLines = fullText.split('\n');
-                        for (const rawLine of rawLines) {
-                            if (!rawLine.trim()) { lines.push(''); continue; }
-                            const words = rawLine.split(' ');
-                            let current = '';
-                            for (const word of words) {
-                                const test = current ? `${current} ${word}` : word;
-                                if (ctx.measureText(test).width > maxTextW && current) {
-                                    lines.push(current);
-                                    current = word;
-                                } else {
-                                    current = test;
+                            ctx.font = `${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
+                            ctx.textAlign = (tl.textAlign as CanvasTextAlign) || 'center';
+                            ctx.textBaseline = 'top';
+
+                            // Word-wrap
+                            const lineH = fontSize * (tl.lineHeight || 1.5);
+                            const lines: string[] = [];
+                            const rawLines = tl.content.split('\n');
+                            for (const rawLine of rawLines) {
+                                if (!rawLine.trim()) { lines.push(''); continue; }
+                                const words = rawLine.split(' ');
+                                let current = '';
+                                for (const word of words) {
+                                    const test = current ? `${current} ${word}` : word;
+                                    if (ctx.measureText(test).width > maxW && current) {
+                                        lines.push(current);
+                                        current = word;
+                                    } else {
+                                        current = test;
+                                    }
+                                }
+                                if (current) lines.push(current);
+                            }
+
+                            const totalH = lines.length * lineH;
+                            const startY = -totalH / 2;
+                            const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
+                            const textMode = tl.textMode || 'outline';
+
+                            for (let li = 0; li < lines.length; li++) {
+                                const ly = startY + li * lineH;
+                                const lx = 0;
+
+                                if (textMode === 'box' || textMode === 'caption') {
+                                    const m = ctx.measureText(lines[li]);
+                                    const boxPad = fontSize * 0.3;
+                                    const boxW = m.width + boxPad * 2;
+                                    const boxH = lineH;
+                                    const boxX = tl.textAlign === 'center' ? -boxW / 2 : tl.textAlign === 'right' ? -boxW : 0;
+                                    ctx.fillStyle = tl.backgroundColor || 'rgba(0,0,0,0.7)';
+                                    ctx.fillRect(boxX, ly - fontSize * 0.1, boxW, boxH);
+                                }
+
+                                if (textMode === 'outline' || textMode === 'caption') {
+                                    ctx.strokeStyle = tl.outlineColor || '#000';
+                                    ctx.lineWidth = outlineW;
+                                    ctx.lineJoin = 'round';
+                                    ctx.miterLimit = 2;
+                                    ctx.strokeText(lines[li], lx, ly);
+                                }
+
+                                if (textMode === 'shadow') {
+                                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                                    ctx.shadowBlur = outlineW * 2;
+                                    ctx.shadowOffsetX = outlineW;
+                                    ctx.shadowOffsetY = outlineW;
+                                }
+
+                                ctx.fillStyle = tl.color || '#fff';
+                                ctx.fillText(lines[li], lx, ly);
+
+                                if (textMode === 'shadow') {
+                                    ctx.shadowColor = 'transparent';
+                                    ctx.shadowBlur = 0;
+                                    ctx.shadowOffsetX = 0;
+                                    ctx.shadowOffsetY = 0;
                                 }
                             }
-                            if (current) lines.push(current);
+                            ctx.restore();
                         }
+                    } else {
+                        // ── Fallback: basic text overlay (no editor data) ──
+                        const fullText = (slide.text || '').trim();
+                        if (fullText) {
+                            const scale = W / 1080;
+                            const isLastSlide = slide.slide_number === slides.length;
+                            const isHook = slide.slide_number === 1;
+                            const totalLen = fullText.length;
 
-                        const totalTextH = lines.length * lineH;
-                        const startY = (H - totalTextH) / 2;
+                            let baseFontSize: number;
+                            if (isHook) { baseFontSize = totalLen > 80 ? 52 : totalLen > 50 ? 60 : 72; }
+                            else if (isLastSlide) {
+                                if (totalLen > 300) baseFontSize = 30;
+                                else if (totalLen > 250) baseFontSize = 34;
+                                else if (totalLen > 180) baseFontSize = 38;
+                                else if (totalLen > 120) baseFontSize = 44;
+                                else if (totalLen > 80) baseFontSize = 48;
+                                else baseFontSize = 52;
+                            } else {
+                                if (totalLen > 120) baseFontSize = 40;
+                                else if (totalLen > 80) baseFontSize = 48;
+                                else if (totalLen > 40) baseFontSize = 52;
+                                else baseFontSize = 60;
+                            }
 
-                        // Draw each line with outline + fill
-                        const outlineW = Math.round(10 * scale);
-                        for (let li = 0; li < lines.length; li++) {
-                            const y = startY + li * lineH;
-                            const x = W / 2;
+                            const fontSize = Math.round(baseFontSize * scale);
+                            const padding = Math.round(50 * scale);
+                            const maxTextW = W - padding * 2;
+                            const lineH = fontSize * 1.5;
 
-                            ctx.strokeStyle = '#000';
-                            ctx.lineWidth = outlineW;
-                            ctx.lineJoin = 'round';
-                            ctx.miterLimit = 2;
-                            ctx.strokeText(lines[li], x, y);
+                            ctx.font = `700 ${fontSize}px Montserrat, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'top';
 
-                            ctx.fillStyle = '#fff';
-                            ctx.fillText(lines[li], x, y);
+                            const lines: string[] = [];
+                            const rawLines = fullText.split('\n');
+                            for (const rawLine of rawLines) {
+                                if (!rawLine.trim()) { lines.push(''); continue; }
+                                const words = rawLine.split(' ');
+                                let current = '';
+                                for (const word of words) {
+                                    const test = current ? `${current} ${word}` : word;
+                                    if (ctx.measureText(test).width > maxTextW && current) {
+                                        lines.push(current);
+                                        current = word;
+                                    } else {
+                                        current = test;
+                                    }
+                                }
+                                if (current) lines.push(current);
+                            }
+
+                            const totalTextH = lines.length * lineH;
+                            const startY = (H - totalTextH) / 2;
+                            const outlineW = Math.round(10 * scale);
+
+                            for (let li = 0; li < lines.length; li++) {
+                                const y = startY + li * lineH;
+                                const x = W / 2;
+                                ctx.strokeStyle = '#000';
+                                ctx.lineWidth = outlineW;
+                                ctx.lineJoin = 'round';
+                                ctx.miterLimit = 2;
+                                ctx.strokeText(lines[li], x, y);
+                                ctx.fillStyle = '#fff';
+                                ctx.fillText(lines[li], x, y);
+                            }
                         }
                     }
 
                     const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png', 1));
                     if (blob) {
-                        saveAs(blob, `slide-${slide.slide_number}.png`);
+                        saveAs(blob, `slide-${si + 1}.png`);
                         downloadedCount++;
                     }
 
-                    if (slide.slide_number < slides.length) {
+                    if (si < slides.length - 1) {
                         await new Promise(r => setTimeout(r, 200));
                     }
                 } catch (err) {
-                    console.error(`Failed to export slide ${slide.slide_number}`, err);
+                    console.error(`Failed to export slide ${si + 1}`, err);
                 }
             }
 
