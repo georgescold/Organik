@@ -131,6 +131,59 @@ export async function changePassword(currentPassword: string, newPassword: strin
     }
 }
 
+// ============= DEFAULT FONT SETTINGS =============
+
+export interface DefaultFontSettings {
+    fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: string;
+    fontStyle?: 'normal' | 'italic';
+    textAlign?: 'left' | 'center' | 'right';
+    color?: string;
+    outlineColor?: string;
+    outlineWidth?: number;
+    lineHeight?: number;
+    textMode?: string;
+    backgroundColor?: string;
+}
+
+export async function getDefaultFontSettings(): Promise<{ success?: boolean; error?: string; settings?: DefaultFontSettings | null }> {
+    const session = await auth();
+    if (!session?.user?.id) return { error: 'Unauthorized' };
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { defaultFontSettings: true }
+        });
+
+        const settings = user?.defaultFontSettings
+            ? JSON.parse(user.defaultFontSettings) as DefaultFontSettings
+            : null;
+
+        return { success: true, settings };
+    } catch (e) {
+        return { error: 'Failed to fetch font settings' };
+    }
+}
+
+export async function saveDefaultFontSettings(settings: DefaultFontSettings) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: 'Unauthorized' };
+
+    try {
+        await prisma.user.update({
+            where: { id: session.user.id },
+            data: { defaultFontSettings: JSON.stringify(settings) }
+        });
+
+        return { success: true };
+    } catch (e) {
+        console.error("Failed to save font settings:", e);
+        return { error: 'Failed to save font settings' };
+    }
+}
+
 export async function getAllUserApiKeys() {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };

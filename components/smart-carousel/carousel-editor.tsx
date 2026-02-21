@@ -36,6 +36,7 @@ import { MobileToolbar } from './panels/mobile-toolbar';
 
 // Presets
 import type { TextStylePreset } from '@/lib/text-style-presets';
+import { getDefaultFontSettings, saveDefaultFontSettings, type DefaultFontSettings } from '@/server/actions/user-actions';
 
 // Types
 import type {
@@ -66,6 +67,40 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
     const [showGuideX, setShowGuideX] = useState(false);
     const [showGuideY, setShowGuideY] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+
+    // ============================================
+    // Default font settings (loaded from user account)
+    // ============================================
+    const fontDefaultsRef = useRef<DefaultFontSettings | null>(null);
+
+    useEffect(() => {
+        getDefaultFontSettings().then(res => {
+            if (res.success && res.settings) fontDefaultsRef.current = res.settings;
+        }).catch(() => {});
+    }, []);
+
+    const handleSaveDefaults = useCallback(async (layer: TextLayer) => {
+        const settings: DefaultFontSettings = {
+            fontSize: layer.fontSize,
+            fontFamily: layer.fontFamily,
+            fontWeight: layer.fontWeight,
+            fontStyle: layer.fontStyle,
+            textAlign: layer.textAlign,
+            color: layer.color,
+            outlineColor: layer.outlineColor,
+            outlineWidth: layer.outlineWidth,
+            lineHeight: layer.lineHeight,
+            textMode: layer.textMode,
+            backgroundColor: layer.backgroundColor,
+        };
+        const res = await saveDefaultFontSettings(settings);
+        if (res.success) {
+            fontDefaultsRef.current = settings;
+            toast.success('Police par défaut sauvegardée');
+        } else {
+            toast.error('Erreur lors de la sauvegarde');
+        }
+    }, []);
 
     // ============================================
     // Dynamic canvas dimensions based on background image
@@ -283,6 +318,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
     // ============================================
     const addTextLayer = () => {
         const maxZIndex = Math.max(...activeSlide.layers.map(l => l.zIndex), 0);
+        const d = fontDefaultsRef.current;
         const newLayer: TextLayer = {
             id: `text-${Date.now()}`,
             type: 'text',
@@ -292,17 +328,18 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             rotation: 0,
             opacity: 100,
             zIndex: maxZIndex + 1,
-            fontSize: 28,
-            fontFamily: 'Montserrat',
-            fontWeight: '700',
-            fontStyle: 'normal',
-            textAlign: 'center',
-            color: '#ffffff',
-            outlineColor: '#000000',
-            outlineWidth: 1.5,
-            lineHeight: 1.5,
+            fontSize: d?.fontSize ?? 28,
+            fontFamily: d?.fontFamily ?? 'Montserrat',
+            fontWeight: d?.fontWeight ?? '700',
+            fontStyle: d?.fontStyle ?? 'normal',
+            textAlign: d?.textAlign ?? 'center',
+            color: d?.color ?? '#ffffff',
+            outlineColor: d?.outlineColor ?? '#000000',
+            outlineWidth: d?.outlineWidth ?? 1.5,
+            lineHeight: d?.lineHeight ?? 1.5,
             maxWidth: 300,
-            textMode: 'outline',
+            textMode: (d?.textMode as any) ?? 'outline',
+            backgroundColor: d?.backgroundColor,
         };
         updateSlide({ layers: [...activeSlide.layers, newLayer] });
         setSelectedLayerId(newLayer.id);
@@ -819,6 +856,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                                     <TextPanel
                                         layer={selectedLayer as TextLayer}
                                         onUpdate={(updates) => updateLayer(selectedLayer.id, updates)}
+                                        onSaveAsDefault={() => handleSaveDefaults(selectedLayer as TextLayer)}
                                     />
 
                                     {/* Delete / Duplicate inline */}
@@ -895,6 +933,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 onDeleteLayer={() => selectedLayerId && deleteLayer(selectedLayerId)}
                 onDuplicateLayer={() => selectedLayerId && duplicateLayer(selectedLayerId)}
                 onApplyPreset={applyPresetMobile}
+                onSaveAsDefault={selectedLayer?.type === 'text' ? () => handleSaveDefaults(selectedLayer as TextLayer) : undefined}
                 hasSelection={!!selectedLayerId}
             />
         </div>

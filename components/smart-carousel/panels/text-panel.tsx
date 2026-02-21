@@ -18,6 +18,7 @@ import {
     AlignLeft,
     AlignCenter,
     AlignRight,
+    Star,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { TextLayer, TextMode } from '@/types/post';
@@ -54,9 +55,10 @@ const fontWeights = [
 interface TextPanelProps {
     layer: TextLayer;
     onUpdate: (updates: Partial<TextLayer>) => void;
+    onSaveAsDefault?: () => void;
 }
 
-export function TextPanel({ layer, onUpdate }: TextPanelProps) {
+export function TextPanel({ layer, onUpdate, onSaveAsDefault }: TextPanelProps) {
     return (
         <div className="space-y-3">
             {/* Content */}
@@ -304,6 +306,21 @@ export function TextPanel({ layer, onUpdate }: TextPanelProps) {
                     step={1}
                 />
             </div>
+
+            {/* Save as default */}
+            {onSaveAsDefault && (
+                <div className="pt-2 border-t border-white/10">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full border-white/10 text-white/60 hover:text-white hover:bg-white/10"
+                        onClick={onSaveAsDefault}
+                    >
+                        <Star className="h-3.5 w-3.5 mr-1.5" />
+                        Définir comme police par défaut
+                    </Button>
+                </div>
+            )}
         </div>
     );
 }

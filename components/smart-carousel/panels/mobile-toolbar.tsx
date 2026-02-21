@@ -22,6 +22,7 @@ import {
     Copy,
     Layers,
     SlidersHorizontal,
+    Star,
 } from 'lucide-react';
 import { ColorPicker } from '../controls/color-picker';
 import { FILTER_PRESETS, FILTER_CATEGORIES, getFilterCSS, type FilterCategory } from '@/lib/filter-presets';
@@ -45,6 +46,7 @@ interface MobileToolbarProps {
     onDeleteLayer: () => void;
     onDuplicateLayer: () => void;
     onApplyPreset: (preset: TextStylePreset) => void;
+    onSaveAsDefault?: () => void;
     hasSelection: boolean;
 }
 
@@ -57,6 +59,7 @@ export function MobileToolbar({
     onDeleteLayer,
     onDuplicateLayer,
     onApplyPreset,
+    onSaveAsDefault,
     hasSelection,
 }: MobileToolbarProps) {
     const [sheetMode, setSheetMode] = useState<SheetMode>('none');
@@ -230,6 +233,14 @@ export function MobileToolbar({
                                 active={sheetMode === 'presets'}
                                 onClick={() => toggleSheet('presets')}
                             />
+                            {/* Save as default */}
+                            {onSaveAsDefault && (
+                                <ToolbarButton
+                                    icon={<Star className="h-4 w-4" />}
+                                    label="Défaut"
+                                    onClick={onSaveAsDefault}
+                                />
+                            )}
                         </div>
                     </div>
                 )}

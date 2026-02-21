@@ -19,6 +19,7 @@ model User {
   image           String?
   anthropicApiKey String?
   apifyApiKey     String?
+  defaultFontSettings String?   // JSON: default text style for canvas editor
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
