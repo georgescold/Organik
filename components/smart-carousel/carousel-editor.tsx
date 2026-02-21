@@ -698,15 +698,20 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                                     {idx + 1}
                                 </div>
                             </div>
-                            {/* Slide actions on hover/long-press */}
-                            <div className="absolute -top-1 -right-1 hidden group-hover:flex gap-0.5 z-10">
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); deleteSlide(idx); }}
-                                    className="w-4 h-4 bg-red-500 rounded-full flex items-center justify-center shadow"
-                                >
-                                    <Trash2 className="h-2.5 w-2.5 text-white" />
-                                </button>
-                            </div>
+                            {/* Slide actions — visible on hover (desktop) and always on active slide (mobile) */}
+                            {slides.length > 1 && (
+                                <div className={cn(
+                                    "absolute -top-2 -right-2 z-10 transition-opacity",
+                                    idx === activeSlideIndex ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                )}>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); deleteSlide(idx); }}
+                                        className="w-5 h-5 sm:w-6 sm:h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                                    >
+                                        <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ))}
                     {/* Add Slide button */}

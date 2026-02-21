@@ -195,11 +195,15 @@ export function CreationView({ initialPost }: CreationViewProps) {
     // Convert EditorSlides back to the original Slide format
     const convertFromEditorSlides = (editorSlides: EditorSlide[]): Slide[] => {
         return editorSlides.map((es, idx) => {
-            // Find the main text layer
-            const textLayer = es.layers.find(l => l.type === 'text') as TextLayer | undefined;
+            // Collect ALL text layers, sorted by vertical position (top → bottom)
+            const textLayers = es.layers
+                .filter((l): l is TextLayer => l.type === 'text')
+                .sort((a, b) => a.y - b.y)
+                .map(l => l.content)
+                .filter(Boolean);
             return {
                 slide_number: idx + 1,
-                text: textLayer?.content || '',
+                text: textLayers.join('\n\n'),
                 intention: slides[idx]?.intention || 'Custom',
                 image_id: es.backgroundImage?.imageId,
                 image_url: es.backgroundImage?.imageUrl,

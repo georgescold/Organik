@@ -165,7 +165,7 @@ export function TextLayerContent({
                 onChange={(e) => setLocalContent(e.target.value)}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
-                className="bg-black/50 backdrop-blur border-2 border-primary rounded p-2 resize-none outline-none min-w-[120px]"
+                className="bg-black/50 backdrop-blur border-2 border-primary rounded p-2 resize-none outline-none min-w-[60px]"
                 style={{
                     ...textStyles,
                     minHeight: '1.5em',

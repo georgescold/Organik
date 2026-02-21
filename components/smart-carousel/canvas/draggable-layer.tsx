@@ -193,11 +193,11 @@ export function DraggableLayer({
         if (type === 'corner' && onResize) {
             const deltaY = moveClientY - ref.y;
             const scaleFactor = deltaY * 0.5;
-            const newFontSize = Math.max(12, Math.min(120, ref.fontSize + scaleFactor));
+            const newFontSize = Math.max(6, Math.min(120, ref.fontSize + scaleFactor));
             onResize(layer.id, Math.round(newFontSize));
         } else if (type === 'side' && onTextWidthResize) {
             const deltaX = (moveClientX - ref.x) * 2;
-            const newWidth = Math.max(50, Math.min(1000, ref.maxWidth + deltaX));
+            const newWidth = Math.max(24, Math.min(1000, ref.maxWidth + deltaX));
             onTextWidthResize(layer.id, Math.round(newWidth));
         }
     };
