@@ -68,6 +68,30 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
     const [isExporting, setIsExporting] = useState(false);
 
     // ============================================
+    // Dynamic canvas dimensions based on background image
+    // Defaults to 360×640 (9:16) if no image, adapts to image ratio otherwise
+    // ============================================
+    const CANVAS_BASE_W = 360;
+    const [canvasW, setCanvasW] = useState(CANVAS_BASE_W);
+    const [canvasH, setCanvasH] = useState(640);
+
+    useEffect(() => {
+        // Detect aspect ratio from the first slide with an image
+        const firstImg = initialSlides.find(s => s.backgroundImage?.imageUrl);
+        if (!firstImg?.backgroundImage?.imageUrl) return;
+
+        const img = new Image();
+        img.onload = () => {
+            const ratio = img.naturalWidth / img.naturalHeight;
+            // Keep width at CANVAS_BASE_W, compute height from ratio
+            const h = Math.round(CANVAS_BASE_W / ratio);
+            setCanvasW(CANVAS_BASE_W);
+            setCanvasH(h);
+        };
+        img.src = firstImg.backgroundImage.imageUrl;
+    }, []); // Run once on mount
+
+    // ============================================
     // Undo / Redo
     // ============================================
     const [history, setHistory] = useState<HistoryEntry[]>([{
@@ -137,7 +161,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             // On mobile, account for the fixed toolbar overlay (100px bottom padding)
             const isMobile = window.innerWidth < 768;
             const containerH = container.clientHeight - (isMobile ? 100 : 16);
-            const scale = Math.min(containerW / 360, containerH / 640, 1);
+            const scale = Math.min(containerW / canvasW, containerH / canvasH, 1);
             setCanvasScale(scale);
         };
 
@@ -145,7 +169,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
         const observer = new ResizeObserver(updateScale);
         observer.observe(container);
         return () => observer.disconnect();
-    }, []);
+    }, [canvasW, canvasH]);
 
     // ============================================
     // Keyboard Shortcuts
@@ -442,8 +466,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 }
 
                 // Draw text layers
-                const scaleX = W / 360; // editor canvas is 360px wide
-                const scaleY = H / 640; // editor canvas is 640px tall
+                const scaleX = W / canvasW; // editor canvas width
+                const scaleY = H / canvasH; // editor canvas height
 
                 for (const layer of slide.layers) {
                     if (layer.type !== 'text' || layer.visible === false) continue;
@@ -587,12 +611,12 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         <div key={slide.id} className="relative group shrink-0">
                             <div
                                 className={cn(
-                                    "aspect-[9/16] rounded cursor-pointer border-2 transition-all overflow-hidden relative w-14 sm:w-16 md:w-auto touch-manipulation",
+                                    "rounded cursor-pointer border-2 transition-all overflow-hidden relative w-14 sm:w-16 md:w-auto touch-manipulation",
                                     idx === activeSlideIndex
                                         ? "border-primary ring-2 ring-primary/30"
                                         : "border-white/10 hover:border-white/30"
                                 )}
-                                style={{ backgroundColor: slide.backgroundColor }}
+                                style={{ backgroundColor: slide.backgroundColor, aspectRatio: `${canvasW}/${canvasH}` }}
                                 onClick={() => {
                                     setActiveSlideIndex(idx);
                                     setSelectedLayerId(null);
@@ -620,7 +644,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     {/* Add Slide button */}
                     <button
                         onClick={addSlide}
-                        className="shrink-0 w-12 sm:w-14 md:w-auto aspect-[9/16] rounded border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 hover:border-primary/50 hover:text-primary transition-colors touch-manipulation"
+                        className="shrink-0 w-12 sm:w-14 md:w-auto rounded border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 hover:border-primary/50 hover:text-primary transition-colors touch-manipulation"
+                        style={{ aspectRatio: `${canvasW}/${canvasH}` }}
                     >
                         <Plus className="h-4 w-4" />
                     </button>
@@ -643,8 +668,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                             !isExporting ? "rounded-lg shadow-2xl ring-1 ring-white/10" : "rounded-none shadow-none"
                         )}
                         style={{
-                            width: '360px',
-                            height: '640px',
+                            width: `${canvasW}px`,
+                            height: `${canvasH}px`,
                             transform: isExporting ? undefined : `scale(${canvasScale})`,
                             transformOrigin: 'center center',
                         }}
