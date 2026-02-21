@@ -65,7 +65,8 @@ export function DraggableLayer({
     }, [layer.x, layer.y, x, y]);
 
     // ============================================
-    // Multi-touch: Pinch to resize + rotate
+    // Multi-touch: Pinch to rotate only (no font size zoom)
+    // Font size is controlled exclusively via resize handles
     // ============================================
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
         if (e.touches.length === 2) {
@@ -76,12 +77,11 @@ export function DraggableLayer({
 
             const t1 = e.touches[0];
             const t2 = e.touches[1];
-            const currentFontSize = layer.type === 'text' ? (layer as TextLayer).fontSize : 24;
 
             pinchStartRef.current = {
                 distance: getTouchDistance(t1, t2),
                 angle: getTouchAngle(t1, t2),
-                fontSize: currentFontSize,
+                fontSize: 0, // unused — pinch no longer changes font size
                 rotation: layer.rotation || 0,
             };
         }
@@ -97,20 +97,10 @@ export function DraggableLayer({
 
             const t1 = e.touches[0];
             const t2 = e.touches[1];
-            const currentDistance = getTouchDistance(t1, t2);
             const currentAngle = getTouchAngle(t1, t2);
             const start = pinchStartRef.current;
 
-            // Scale factor from pinch
-            const scale = currentDistance / start.distance;
-
-            // Resize text
-            if (layer.type === 'text' && onResize) {
-                const newSize = Math.max(12, Math.min(120, Math.round(start.fontSize * scale)));
-                onResize(layer.id, newSize);
-            }
-
-            // Rotation from angle change
+            // Rotation from angle change (pinch no longer resizes text)
             if (onRotate) {
                 const deltaAngle = currentAngle - start.angle;
                 let newRotation = (start.rotation + deltaAngle) % 360;
@@ -141,7 +131,7 @@ export function DraggableLayer({
             el.removeEventListener('touchend', handlePinchEnd);
             el.removeEventListener('touchcancel', handlePinchEnd);
         };
-    }, [layer, onResize, onRotate]);
+    }, [layer, onRotate]);
 
     // ============================================
     // Drag handlers
@@ -435,6 +425,16 @@ export function DraggableLayer({
                 />
             )}
 
+            {/* Font size indicator during resize */}
+            {isResizing && layer.type === 'text' && (
+                <div
+                    data-export-ignore="true"
+                    className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap"
+                >
+                    {(layer as TextLayer).fontSize}px
+                </div>
+            )}
+
             {/* Rotation indicator during pinch */}
             {isPinching && layer.rotation !== 0 && (
                 <div
@@ -473,8 +473,9 @@ interface ResizeHandlesProps {
 
 function ResizeHandles({ onResizeStart, onResizeSideStart, onRotateStart, showResize, showSideResize, showRotate, isResizing }: ResizeHandlesProps) {
     const cornerClass = "absolute w-2.5 h-2.5 bg-primary rounded-full border-[1.5px] border-white shadow-md";
-    const sideClass = "absolute w-1.5 h-5 bg-primary rounded-full border-[1.5px] border-white shadow-md cursor-ew-resize hover:scale-125 active:scale-150 transition-transform";
-    const resizeClass = "absolute w-4 h-4 bg-white rounded-full border-2 border-primary shadow-lg cursor-se-resize hover:scale-125 active:scale-150 transition-transform";
+    // Mobile: much larger touch targets (min 44px) for easy finger access
+    const sideClass = "absolute w-3 h-6 md:w-1.5 md:h-5 bg-primary rounded-full border-[1.5px] border-white shadow-md cursor-ew-resize hover:scale-125 active:scale-150 transition-transform";
+    const resizeClass = "absolute w-8 h-8 md:w-5 md:h-5 bg-white rounded-full border-2 border-primary shadow-lg cursor-se-resize hover:scale-125 active:scale-150 transition-transform";
 
     return (
         <>
@@ -483,34 +484,34 @@ function ResizeHandles({ onResizeStart, onResizeSideStart, onRotateStart, showRe
             <div data-export-ignore="true" className={cn(cornerClass, "-top-1 -right-1 pointer-events-none")} />
             <div data-export-ignore="true" className={cn(cornerClass, "-bottom-1 -left-1 pointer-events-none")} />
 
-            {/* Side handles for text width */}
+            {/* Side handles for text width — larger touch area on mobile */}
             {showSideResize && (
                 <>
                     <div
                         data-export-ignore="true"
-                        className={cn(sideClass, "-right-1 top-1/2 -translate-y-1/2")}
+                        className={cn(sideClass, "-right-2 md:-right-1 top-1/2 -translate-y-1/2")}
                         onMouseDown={onResizeSideStart}
                         onTouchStart={onResizeSideStart}
                     />
                     <div
                         data-export-ignore="true"
-                        className={cn(sideClass, "-left-1 top-1/2 -translate-y-1/2")}
+                        className={cn(sideClass, "-left-2 md:-left-1 top-1/2 -translate-y-1/2")}
                         onMouseDown={onResizeSideStart}
                         onTouchStart={onResizeSideStart}
                     />
                 </>
             )}
 
-            {/* Resize handle (bottom-right) */}
+            {/* Resize handle (bottom-right) — large touch target on mobile */}
             {showResize ? (
                 <div
                     data-export-ignore="true"
-                    className={cn(resizeClass, "-bottom-2 -right-2", isResizing && "scale-125 bg-primary border-white")}
+                    className={cn(resizeClass, "-bottom-4 -right-4 md:-bottom-2.5 md:-right-2.5", isResizing && "scale-125 bg-primary border-white")}
                     onMouseDown={onResizeStart}
                     onTouchStart={onResizeStart}
                     title="Glisser pour redimensionner"
                 >
-                    <svg className="w-full h-full p-0.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <svg className="w-full h-full p-1 md:p-0.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                         <path d="M21 21L12 12M21 21V15M21 21H15" />
                     </svg>
                 </div>
@@ -518,22 +519,22 @@ function ResizeHandles({ onResizeStart, onResizeSideStart, onRotateStart, showRe
                 <div data-export-ignore="true" className={cn(cornerClass, "-bottom-1 -right-1 pointer-events-none")} />
             )}
 
-            {/* Rotation handle (top-center) */}
+            {/* Rotation handle (top-center) — larger on mobile */}
             {showRotate && (
                 <div
                     data-export-ignore="true"
-                    className="absolute -top-8 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto"
+                    className="absolute -top-10 md:-top-8 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto"
                 >
                     {/* Connector line */}
                     <div className="w-px h-3 bg-primary/50" />
                     {/* Rotation handle */}
                     <div
-                        className="w-4 h-4 bg-white rounded-full border-2 border-primary shadow-lg cursor-grab hover:scale-125 active:scale-150 transition-transform flex items-center justify-center"
+                        className="w-7 h-7 md:w-4 md:h-4 bg-white rounded-full border-2 border-primary shadow-lg cursor-grab hover:scale-125 active:scale-150 transition-transform flex items-center justify-center"
                         onMouseDown={onRotateStart}
                         onTouchStart={onRotateStart}
                         title="Glisser pour tourner"
                     >
-                        <svg className="w-2.5 h-2.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <svg className="w-3.5 h-3.5 md:w-2.5 md:h-2.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                             <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8" />
                         </svg>
                     </div>

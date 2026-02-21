@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useTransition, useEffect, useRef } from 'react';
+import { useState, useTransition, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { generateHooks, generateCarousel, saveCarousel, getDrafts, updatePostContent, saveHookAsIdea, getSavedIdeas, deletePost, rejectHook, generateReplacementHook, generateVariations, getPost, scoreCarouselBeforePublish, improveCarouselFromScore, HookProposal, Slide } from '@/server/actions/creation-actions';
-import { parseTwemojiAsync } from '@/lib/use-twemoji';
+import { loadTwemojiScript } from '@/lib/use-twemoji';
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
@@ -107,7 +107,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [generationPhase, setGenerationPhase] = useState<'idle' | 'generating' | 'scoring' | 'improving'>('idle');
     const [showConfirmSave, setShowConfirmSave] = useState(false);
     const inlineConfigRef = useRef<HTMLDivElement>(null);
-    const slidesPreviewRef = useRef<HTMLDivElement>(null);
+    // slidesPreviewRef removed — Twemoji now renders as React JSX, no DOM mutation needed
 
     // Convert current slides to EditorSlide format for the Canva editor
     // Splits text on double newlines into separate layers for TikTok-like layout
@@ -323,16 +323,40 @@ export function CreationView({ initialPost }: CreationViewProps) {
         }
     }, [selectedHook]);
 
-    // Force Twemoji parsing on slide preview after slides change
-    // Uses async version to ensure Twemoji script is loaded first
+    // Load Twemoji script eagerly so it's ready for rendering
+    const [twemojiReady, setTwemojiReady] = useState(false);
     useEffect(() => {
-        if (slides.length > 0 && slidesPreviewRef.current) {
-            const timer = setTimeout(() => {
-                parseTwemojiAsync(slidesPreviewRef.current);
-            }, 150);
-            return () => clearTimeout(timer);
+        loadTwemojiScript().then(() => setTwemojiReady(true)).catch(() => {});
+    }, []);
+
+    /**
+     * Convert text to HTML with Twemoji <img> tags.
+     * Uses Twemoji's own parser on a temporary DOM element for perfect emoji detection.
+     * The resulting HTML is rendered via dangerouslySetInnerHTML so React preserves
+     * the Twemoji images across re-renders (unlike DOM mutation which gets undone).
+     */
+    const twemojiHtml = useCallback((text: string): string => {
+        const tw = (window as any).twemoji;
+        if (!tw || !twemojiReady) {
+            // Fallback: escape HTML and return as-is
+            const d = document.createElement('span');
+            d.textContent = text;
+            return d.innerHTML;
         }
-    }, [slides]);
+        const temp = document.createElement('span');
+        temp.textContent = text;
+        tw.parse(temp, {
+            folder: 'svg',
+            ext: '.svg',
+            base: 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/',
+        });
+        // Style Twemoji images inline for correct size and alignment
+        temp.querySelectorAll('img.emoji').forEach(img => {
+            (img as HTMLElement).style.cssText =
+                'height:1em;width:1em;margin:0 0.05em;vertical-align:-0.1em;display:inline;';
+        });
+        return temp.innerHTML;
+    }, [twemojiReady]);
 
     const handleOpenImagePicker = async (index: number) => {
         setPickingSlideIndex(index);
@@ -969,7 +993,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
                                         <CardHeader className="pt-8"> {/* Added padding for badge */}
                                             <div className="text-xs font-mono text-primary mb-2 uppercase tracking-wide">{h.angle}</div>
-                                            <CardTitle className="leading-tight text-lg min-h-[60px]" data-twemoji>"{h.hook}"</CardTitle>
+                                            <CardTitle className="leading-tight text-lg min-h-[60px]">"<span dangerouslySetInnerHTML={{ __html: twemojiHtml(h.hook) }} />"</CardTitle>
                                         </CardHeader>
                                         <CardContent>
                                             <p className="text-sm text-muted-foreground">{h.reason}</p>
@@ -1516,7 +1540,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 </DialogContent>
             </Dialog>
 
-            <div ref={slidesPreviewRef} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {slides.map((slide, index) => {
                     // Split text into paragraphs for TikTok-like overlay rendering
                     // Don't split the last slide (CTA) — it stays as a single block
@@ -1541,22 +1565,6 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         }
                         if (isFirst) return len > 80 ? 13 : len > 40 ? 14 : 16;
                         return len > 60 ? 12 : len > 30 ? 13 : 15;
-                    };
-
-                    // Render text with emojis stripped of text-shadow
-                    const emojiRx = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/gu;
-                    const renderCleanEmojis = (text: string) => {
-                        const parts = text.split(emojiRx).filter(Boolean);
-                        emojiRx.lastIndex = 0;
-                        if (parts.length <= 1 && !emojiRx.test(text)) return text;
-                        emojiRx.lastIndex = 0;
-                        return parts.map((part, pi) => {
-                            emojiRx.lastIndex = 0;
-                            if (emojiRx.test(part)) {
-                                return <span key={pi} style={{ textShadow: 'none' }}>{part}</span>;
-                            }
-                            return <span key={pi}>{part}</span>;
-                        });
                     };
 
                     // Smart paragraph positioning: estimate heights and avoid overlap
@@ -1620,7 +1628,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 </div>
 
                                 {/* TikTok-style text overlay — matches editor default (outline mode) */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center px-3 pointer-events-none z-10" data-twemoji>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center px-3 pointer-events-none z-10">
                                     {paragraphs.length > 0 ? paragraphs.map((paragraph, pIdx) => {
                                         const isLastSlide = index === slides.length - 1;
                                         const fontSize = getAutoFontSize(paragraph, pIdx === 0, index === 0 && pIdx === 0, isLastSlide);
@@ -1665,7 +1673,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                                     whiteSpace: 'pre-wrap',
                                                 }}
                                             >
-                                                {renderCleanEmojis(paragraph)}
+                                                <span dangerouslySetInnerHTML={{ __html: twemojiHtml(paragraph) }} />
                                             </div>
                                         );
                                     }) : (
