@@ -6,7 +6,7 @@ import { Upload, X, Loader2 } from 'lucide-react';
 import { uploadImage } from '@/server/actions/image-actions';
 import { toast } from 'sonner';
 import { Progress } from '@/components/ui/progress';
-import imageCompression from 'browser-image-compression';
+
 
 interface ImageUploaderProps {
     onUploadSuccess?: () => void;
@@ -68,26 +68,9 @@ export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderPr
         const processBatch = async (batchFiles: File[]) => {
             const formData = new FormData();
 
-            // Compress/Convert all files in parallel
-            const compressedFiles = await Promise.all(batchFiles.map(async (file) => {
-                try {
-                    const options = {
-                        maxSizeMB: 4.8, // Close to 5MB limit but safe
-                        maxWidthOrHeight: 4096, // High resolution support (4K)
-                        useWebWorker: true,
-                        fileType: "image/jpeg", // Force JPEG for compatibility
-                        initialQuality: 0.95 // Very high quality
-                    };
-                    const compressedFile = await imageCompression(file, options);
-                    const newName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
-                    return new File([compressedFile], newName, { type: "image/jpeg" });
-                } catch (error) {
-                    console.error("Compression failed for", file.name, error);
-                    return file;
-                }
-            }));
-
-            compressedFiles.forEach(f => formData.append('file', f));
+            // Upload original files without compression to preserve quality
+            // Original format (PNG, JPEG, WebP) is kept as-is
+            batchFiles.forEach(f => formData.append('file', f));
 
             if (collectionId) {
                 formData.append('collectionId', collectionId);
@@ -181,7 +164,7 @@ export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderPr
                     <>
                         <Upload className={`h-8 w-8 sm:h-10 sm:w-10 mb-3 sm:mb-4 ${dragActive ? 'text-primary' : 'text-muted-foreground'}`} />
                         <p className="text-xs sm:text-sm font-medium text-center px-2">Glisser-déposer ou cliquer pour uploader plusieurs images</p>
-                        <p className="text-xs text-muted-foreground mt-1">PNG, JPG jusqu'à 5MB</p>
+                        <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP jusqu'à 20MB</p>
                     </>
                 )}
             </div>

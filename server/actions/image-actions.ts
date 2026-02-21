@@ -11,8 +11,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 const SUPABASE_BUCKET = 'images';
 
-// Upload Limit: 5MB
-const MAX_FILE_SIZE = 5 * 1024 * 1024;
+// Upload Limit: 20MB (no client-side compression — originals preserved)
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 export async function uploadImage(formData: FormData) {
     const session = await auth();
