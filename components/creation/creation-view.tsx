@@ -125,14 +125,23 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
             const layers: TextLayer[] = paragraphs.map((paragraph, pIdx) => {
                 const textLength = paragraph.length;
+                // Font sizes must match getAutoFontSize() used in preview rendering
+                // so that editor and preview look identical
+                const isHook = idx === 0 && pIdx === 0;
                 let autoFontSize: number;
-                if (idx === 0 && pIdx === 0) {
-                    autoFontSize = textLength > 80 ? 24 : textLength > 50 ? 28 : 34;
+                if (isHook) {
+                    autoFontSize = textLength > 80 ? 14 : textLength > 50 ? 16 : 19;
+                } else if (isLastSlide) {
+                    if (textLength > 250) autoFontSize = 9;
+                    else if (textLength > 180) autoFontSize = 10;
+                    else if (textLength > 120) autoFontSize = 12;
+                    else if (textLength > 80) autoFontSize = 13;
+                    else autoFontSize = 14;
                 } else if (pIdx === 0) {
-                    autoFontSize = textLength > 80 ? 22 : textLength > 40 ? 26 : 30;
+                    autoFontSize = textLength > 80 ? 13 : textLength > 40 ? 14 : 16;
                 } else {
                     // Secondary paragraph (subtitle) — smaller
-                    autoFontSize = textLength > 60 ? 20 : textLength > 30 ? 22 : 26;
+                    autoFontSize = textLength > 60 ? 12 : textLength > 30 ? 13 : 15;
                 }
 
                 // Position: first paragraph higher, second lower
@@ -159,7 +168,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     outlineColor: '#000000',
                     outlineWidth: 1.5,
                     lineHeight: 1.5,
-                    maxWidth: 300,
+                    maxWidth: 330, // matches preview's px-3 padding (~360 - 30)
                     textMode: 'outline' as const,
                 };
             });
