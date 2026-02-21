@@ -460,9 +460,40 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 ctx.fillStyle = slide.backgroundColor || '#000';
                 ctx.fillRect(0, 0, W, H);
 
-                // Draw background image 1:1
+                // Draw background image with filters and scale (matches editor preview)
                 if (bgImg) {
-                    ctx.drawImage(bgImg, 0, 0, W, H);
+                    ctx.save();
+
+                    // Apply CSS filters (brightness, contrast, blur, saturate, hue-rotate, sepia)
+                    const f = slide.backgroundImage?.filter;
+                    if (f) {
+                        const fp: string[] = [];
+                        if (f.brightness !== 100) fp.push(`brightness(${f.brightness}%)`);
+                        if (f.contrast !== 100) fp.push(`contrast(${f.contrast}%)`);
+                        if (f.blur > 0) {
+                            // Scale blur proportionally to export resolution
+                            const exportBlur = Math.round(f.blur * (W / canvasW));
+                            fp.push(`blur(${exportBlur}px)`);
+                        }
+                        if (f.saturate != null && f.saturate !== 100) fp.push(`saturate(${f.saturate}%)`);
+                        if (f.hueRotate != null && f.hueRotate !== 0) fp.push(`hue-rotate(${f.hueRotate}deg)`);
+                        if (f.sepia != null && f.sepia > 0) fp.push(`sepia(${f.sepia}%)`);
+                        if (fp.length > 0) ctx.filter = fp.join(' ');
+                    }
+
+                    // Apply zoom/scale (centered, matching editor's transform: scale())
+                    const bgScale = slide.backgroundImage?.scale || 1;
+                    if (bgScale !== 1) {
+                        const drawW = W * bgScale;
+                        const drawH = H * bgScale;
+                        const drawX = (W - drawW) / 2;
+                        const drawY = (H - drawH) / 2;
+                        ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+                    } else {
+                        ctx.drawImage(bgImg, 0, 0, W, H);
+                    }
+
+                    ctx.restore();
                 }
 
                 // Draw text layers
