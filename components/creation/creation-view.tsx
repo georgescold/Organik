@@ -510,11 +510,26 @@ export function CreationView({ initialPost }: CreationViewProps) {
         const loadingToast = toast.loading("Téléchargement des slides...");
         const { saveAs } = await import('file-saver');
 
-        const W = 1080, H = 1920;
-
         try {
             for (const slide of slides) {
                 try {
+                    // Load image first to preserve its original dimensions
+                    let img: HTMLImageElement | null = null;
+                    if (slide.image_url) {
+                        img = await new Promise<HTMLImageElement>((resolve, reject) => {
+                            const i = new Image();
+                            i.crossOrigin = 'anonymous';
+                            i.onload = () => resolve(i);
+                            i.onerror = () => reject(new Error('Image load failed'));
+                            i.src = slide.image_url!;
+                            setTimeout(() => reject(new Error('Image timeout')), 8000);
+                        }).catch(() => null);
+                    }
+
+                    // Use image's native dimensions — no cropping, no stretching
+                    const W = img ? img.naturalWidth : 1080;
+                    const H = img ? img.naturalHeight : 1080;
+
                     const canvas = document.createElement('canvas');
                     canvas.width = W;
                     canvas.height = H;
@@ -526,59 +541,37 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     ctx.fillStyle = '#000';
                     ctx.fillRect(0, 0, W, H);
 
-                    // Background image — draw with object-fit:cover logic
-                    if (slide.image_url) {
-                        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-                            const i = new Image();
-                            i.crossOrigin = 'anonymous';
-                            i.onload = () => resolve(i);
-                            i.onerror = () => reject(new Error('Image load failed'));
-                            i.src = slide.image_url!;
-                            setTimeout(() => reject(new Error('Image timeout')), 8000);
-                        }).catch(() => null);
-
-                        if (img) {
-                            // object-fit:cover — scale to fill then center-crop
-                            const imgRatio = img.naturalWidth / img.naturalHeight;
-                            const canvasRatio = W / H;
-                            let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
-                            if (imgRatio > canvasRatio) {
-                                // Image is wider — crop sides
-                                sw = img.naturalHeight * canvasRatio;
-                                sx = (img.naturalWidth - sw) / 2;
-                            } else {
-                                // Image is taller — crop top/bottom
-                                sh = img.naturalWidth / canvasRatio;
-                                sy = (img.naturalHeight - sh) / 2;
-                            }
-                            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
-                        }
+                    // Draw image 1:1 — preserves original format and quality
+                    if (img) {
+                        ctx.drawImage(img, 0, 0, W, H);
                     }
 
-                    // Text overlay
+                    // Text overlay — scale font relative to image width
                     const fullText = (slide.text || '').trim();
                     if (fullText) {
+                        const scale = W / 1080; // font sizes calibrated for 1080px width
                         const isLastSlide = slide.slide_number === slides.length;
                         const isHook = slide.slide_number === 1;
                         const totalLen = fullText.length;
 
-                        let fontSize: number;
-                        if (isHook) { fontSize = totalLen > 80 ? 52 : totalLen > 50 ? 60 : 72; }
+                        let baseFontSize: number;
+                        if (isHook) { baseFontSize = totalLen > 80 ? 52 : totalLen > 50 ? 60 : 72; }
                         else if (isLastSlide) {
-                            if (totalLen > 300) fontSize = 30;
-                            else if (totalLen > 250) fontSize = 34;
-                            else if (totalLen > 180) fontSize = 38;
-                            else if (totalLen > 120) fontSize = 44;
-                            else if (totalLen > 80) fontSize = 48;
-                            else fontSize = 52;
+                            if (totalLen > 300) baseFontSize = 30;
+                            else if (totalLen > 250) baseFontSize = 34;
+                            else if (totalLen > 180) baseFontSize = 38;
+                            else if (totalLen > 120) baseFontSize = 44;
+                            else if (totalLen > 80) baseFontSize = 48;
+                            else baseFontSize = 52;
                         } else {
-                            if (totalLen > 120) fontSize = 40;
-                            else if (totalLen > 80) fontSize = 48;
-                            else if (totalLen > 40) fontSize = 52;
-                            else fontSize = 60;
+                            if (totalLen > 120) baseFontSize = 40;
+                            else if (totalLen > 80) baseFontSize = 48;
+                            else if (totalLen > 40) baseFontSize = 52;
+                            else baseFontSize = 60;
                         }
 
-                        const padding = 50;
+                        const fontSize = Math.round(baseFontSize * scale);
+                        const padding = Math.round(50 * scale);
                         const maxTextW = W - padding * 2;
                         const lineH = fontSize * 1.5;
 
@@ -609,18 +602,17 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         const startY = (H - totalTextH) / 2;
 
                         // Draw each line with outline + fill
+                        const outlineW = Math.round(10 * scale);
                         for (let li = 0; li < lines.length; li++) {
                             const y = startY + li * lineH;
                             const x = W / 2;
 
-                            // Black outline (stroke text multiple times)
                             ctx.strokeStyle = '#000';
-                            ctx.lineWidth = 10;
+                            ctx.lineWidth = outlineW;
                             ctx.lineJoin = 'round';
                             ctx.miterLimit = 2;
                             ctx.strokeText(lines[li], x, y);
 
-                            // White fill
                             ctx.fillStyle = '#fff';
                             ctx.fillText(lines[li], x, y);
                         }
@@ -1612,12 +1604,12 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 <Trash className="w-3 h-3" />
                             </Button>
 
-                            {/* TikTok Preview - Text overlaid on image */}
-                            <div className="aspect-[9/16] bg-black relative group flex-shrink-0 overflow-hidden">
+                            {/* Preview - preserves original image format */}
+                            <div className="bg-black relative group flex-shrink-0 overflow-hidden">
                                 {slide.image_url ? (
-                                    <img src={slide.image_url} className="w-full h-full object-cover" alt="Slide visual" />
+                                    <img src={slide.image_url} className="w-full h-auto block" alt="Slide visual" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted/20">
+                                    <div className="w-full aspect-square flex items-center justify-center text-muted-foreground bg-muted/20">
                                         Pas d&apos;image trouvée
                                     </div>
                                 )}
