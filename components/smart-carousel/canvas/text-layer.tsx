@@ -45,10 +45,8 @@ export function TextLayerContent({
             setLocalContent(layer.content);
             onEndEdit();
         }
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleBlur();
-        }
+        // Enter inserts a line break (default textarea behavior)
+        // Only Escape cancels editing; clicking outside (blur) validates
     };
 
     const maxWidth = layer.maxWidth || 320;

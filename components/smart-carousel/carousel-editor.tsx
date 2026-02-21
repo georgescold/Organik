@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEditorFonts } from '@/lib/use-editor-fonts';
-import html2canvas from 'html2canvas';
+// html2canvas removed — export now uses native Canvas 2D for accurate image dimensions
 import { saveAs } from 'file-saver';
 import { toast } from 'sonner';
 
@@ -399,41 +399,133 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
     };
 
     // ============================================
-    // Export
+    // Export — uses native Canvas 2D to preserve original image dimensions
     // ============================================
     const exportSlides = async () => {
-        if (!canvasRef.current) return;
         setIsExporting(true);
         toast.info("Export en cours...");
         try {
-            setSelectedLayerId(null);
-            setEditingLayerId(null);
-            setShowGuideX(false);
-            setShowGuideY(false);
-            await new Promise(resolve => setTimeout(resolve, 100));
-
             for (let i = 0; i < slides.length; i++) {
-                setActiveSlideIndex(i);
-                await new Promise(resolve => setTimeout(resolve, i === 0 ? 1500 : 800));
-                await new Promise(resolve => requestAnimationFrame(resolve));
+                const slide = slides[i];
 
-                const capturedCanvas = await html2canvas(canvasRef.current!, {
-                    scale: 3,
-                    width: 360,
-                    height: 640,
-                    useCORS: true,
-                    allowTaint: false,
-                    backgroundColor: null,
-                    logging: false,
-                    imageTimeout: 30000,
-                    ignoreElements: (element) => element.getAttribute('data-export-ignore') === 'true',
-                });
+                // Load background image to get its native dimensions
+                let bgImg: HTMLImageElement | null = null;
+                if (slide.backgroundImage?.imageUrl) {
+                    bgImg = await new Promise<HTMLImageElement>((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => resolve(img);
+                        img.onerror = () => reject(new Error('Image load failed'));
+                        img.src = slide.backgroundImage!.imageUrl;
+                        setTimeout(() => reject(new Error('timeout')), 10000);
+                    }).catch(() => null);
+                }
 
-                const blob = await (await fetch(capturedCanvas.toDataURL('image/png', 1))).blob();
-                saveAs(blob, `slide-${i + 1}.png`);
-                if (i < slides.length - 1) await new Promise(resolve => setTimeout(resolve, 300));
+                // Use image's native dimensions — no forced 9:16
+                const W = bgImg ? bgImg.naturalWidth : 1080;
+                const H = bgImg ? bgImg.naturalHeight : 1920;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = W;
+                canvas.height = H;
+                const ctx = canvas.getContext('2d', { alpha: false })!;
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+
+                // Background color
+                ctx.fillStyle = slide.backgroundColor || '#000';
+                ctx.fillRect(0, 0, W, H);
+
+                // Draw background image 1:1
+                if (bgImg) {
+                    ctx.drawImage(bgImg, 0, 0, W, H);
+                }
+
+                // Draw text layers
+                const scaleX = W / 360; // editor canvas is 360px wide
+                const scaleY = H / 640; // editor canvas is 640px tall
+
+                for (const layer of slide.layers) {
+                    if (layer.type !== 'text' || layer.visible === false) continue;
+                    const tl = layer as TextLayer;
+
+                    const fontSize = Math.round(tl.fontSize * scaleX);
+                    const posX = (tl.x / 100) * W;
+                    const posY = (tl.y / 100) * H;
+                    const maxW = (tl.maxWidth || 300) * scaleX;
+
+                    ctx.save();
+                    ctx.translate(posX, posY);
+                    if (tl.rotation) ctx.rotate((tl.rotation * Math.PI) / 180);
+                    ctx.globalAlpha = (tl.opacity ?? 100) / 100;
+
+                    const fontFamily = `${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
+                    ctx.font = fontFamily;
+                    ctx.textAlign = (tl.textAlign as CanvasTextAlign) || 'center';
+                    ctx.textBaseline = 'top';
+
+                    // Word-wrap
+                    const lineH = fontSize * (tl.lineHeight || 1.5);
+                    const lines: string[] = [];
+                    const rawLines = tl.content.split('\n');
+                    for (const rawLine of rawLines) {
+                        if (!rawLine.trim()) { lines.push(''); continue; }
+                        const words = rawLine.split(' ');
+                        let current = '';
+                        for (const word of words) {
+                            const test = current ? `${current} ${word}` : word;
+                            if (ctx.measureText(test).width > maxW && current) {
+                                lines.push(current);
+                                current = word;
+                            } else {
+                                current = test;
+                            }
+                        }
+                        if (current) lines.push(current);
+                    }
+
+                    const totalH = lines.length * lineH;
+                    const startY = -totalH / 2;
+
+                    // Determine text mode styling
+                    const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
+                    const textMode = tl.textMode || 'outline';
+
+                    for (let li = 0; li < lines.length; li++) {
+                        const ly = startY + li * lineH;
+                        const lx = 0; // textAlign handles horizontal positioning
+
+                        if (textMode === 'box' || textMode === 'caption') {
+                            // Draw background box behind text
+                            const m = ctx.measureText(lines[li]);
+                            const boxPad = fontSize * 0.3;
+                            const boxW = m.width + boxPad * 2;
+                            const boxH = lineH;
+                            const boxX = tl.textAlign === 'center' ? -boxW / 2 : tl.textAlign === 'right' ? -boxW : 0;
+                            ctx.fillStyle = tl.backgroundColor || 'rgba(0,0,0,0.7)';
+                            ctx.fillRect(boxX, ly - fontSize * 0.1, boxW, boxH);
+                        }
+
+                        if (textMode === 'outline' || textMode === 'caption') {
+                            ctx.strokeStyle = tl.outlineColor || '#000';
+                            ctx.lineWidth = outlineW;
+                            ctx.lineJoin = 'round';
+                            ctx.miterLimit = 2;
+                            ctx.strokeText(lines[li], lx, ly);
+                        }
+
+                        ctx.fillStyle = tl.color || '#fff';
+                        ctx.fillText(lines[li], lx, ly);
+                    }
+
+                    ctx.restore();
+                }
+
+                const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png', 1));
+                if (blob) saveAs(blob, `slide-${i + 1}.png`);
+                if (i < slides.length - 1) await new Promise(r => setTimeout(r, 200));
             }
-            toast.success(`${slides.length} slides exportées en 1080×1920 !`);
+            toast.success(`${slides.length} slides exportées !`);
         } catch (error) {
             console.error('Export error:', error);
             toast.error("Erreur lors de l'export");
