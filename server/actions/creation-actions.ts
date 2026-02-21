@@ -1521,7 +1521,7 @@ ${imagesText}`;
     return { slides: slides, description };
 }
 
-export async function saveCarousel(hook: string, slides: Slide[], description: string, status: 'created' | 'draft' = 'created', userId?: string) {
+export async function saveCarousel(hook: string, slides: Slide[], description: string, status: 'created' | 'draft' = 'created', userId?: string, editorData?: string) {
     // If userId is provided (API), use it. Otherwise, get from session (UI)
     let finalUserId: string;
     if (userId) {
@@ -1570,9 +1570,10 @@ export async function saveCarousel(hook: string, slides: Slide[], description: s
                 hookText: hook,
                 description: description,
                 slideCount: slides.length,
-                slides: slidesJson, // ✅ Ensure JSON string is saved
+                slides: slidesJson,
+                editorData: editorData || null, // Full EditorSlide[] with styling
                 status: status,
-                publishedAt: status === 'created' ? new Date() : null,  // ✅ Set publishedAt for created posts
+                publishedAt: status === 'created' ? new Date() : null,
                 metrics: { create: {} }
             }
         });
@@ -1605,7 +1606,8 @@ export async function getDrafts() {
                 hookText: true,
                 title: true,
                 description: true,
-                slides: true,  // Explicitly select slides
+                slides: true,
+                editorData: true,
                 slideCount: true,
                 createdAt: true,
                 updatedAt: true
@@ -1966,6 +1968,7 @@ export async function getPost(postId: string) {
                 title: true,
                 description: true,
                 slides: true,
+                editorData: true,
                 slideCount: true,
                 status: true,
                 createdAt: true,
@@ -1994,7 +1997,7 @@ export async function getPost(postId: string) {
     }
 }
 
-export async function updatePostContent(postId: string, slides: Slide[], description: string, status?: 'draft' | 'created') {
+export async function updatePostContent(postId: string, slides: Slide[], description: string, status?: 'draft' | 'created', editorData?: string) {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
@@ -2004,7 +2007,8 @@ export async function updatePostContent(postId: string, slides: Slide[], descrip
         await prisma.post.update({
             where: { id: postId, userId: session.user.id },
             data: {
-                slides: slidesJson, // ✅ Ensure JSON string is saved
+                slides: slidesJson,
+                editorData: editorData || null, // Full EditorSlide[] with styling
                 slideCount: slides.length,
                 description: description,
                 ...(status && { status }),

@@ -14,7 +14,7 @@ import { PostCopyModal } from './post-copy-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 // file-saver is lazy-loaded in handleDownloadImages to reduce bundle
 import { CarouselEditor } from '@/components/smart-carousel/carousel-editor';
-import type { EditorSlide, TextLayer, UserImage } from '@/types/post';
+import type { EditorSlide, TextLayer, OverlayLayer, UserImage } from '@/types/post';
 
 /**
  * Estimate the rendered height of a text block as a percentage of the canvas.
@@ -70,11 +70,18 @@ function fixTextOverlaps(layers: import('@/types/post').TextLayer[]): void {
     }
 }
 
+interface SavedEditorData {
+    canvasW: number;
+    canvasH: number;
+    slides: EditorSlide[];
+}
+
 interface CreationViewProps {
     initialPost?: {
         id: string;
         hookText: string;
         slides: string | null; // JSON string
+        editorData?: string | null; // JSON string (EditorSlide[] with canvas dims)
         status: string;
     };
 }
@@ -98,6 +105,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
     const [isCanvaEditorOpen, setIsCanvaEditorOpen] = useState(false);
     const [editorSlides, setEditorSlides] = useState<EditorSlide[]>([]);
+    const [savedEditorData, setSavedEditorData] = useState<SavedEditorData | null>(null);
     const [predictiveScore, setPredictiveScore] = useState<any>(null);
     const [isScoring, setIsScoring] = useState(false);
     const [isImproving, setIsImproving] = useState(false);
@@ -212,14 +220,20 @@ export function CreationView({ initialPost }: CreationViewProps) {
     };
 
     const openCanvaEditor = () => {
-        const converted = convertToEditorSlides();
-        setEditorSlides(converted);
+        if (savedEditorData && savedEditorData.slides.length > 0) {
+            // Restore previous editor state (preserves all styling)
+            setEditorSlides(savedEditorData.slides);
+        } else {
+            const converted = convertToEditorSlides();
+            setEditorSlides(converted);
+        }
         setIsCanvaEditorOpen(true);
     };
 
-    const handleCanvaEditorSave = (updatedSlides: EditorSlide[]) => {
+    const handleCanvaEditorSave = (updatedSlides: EditorSlide[], cW: number, cH: number) => {
         const converted = convertFromEditorSlides(updatedSlides);
         setSlides(converted);
+        setSavedEditorData({ canvasW: cW, canvasH: cH, slides: updatedSlides });
         setIsCanvaEditorOpen(false);
         toast.success("Modifications appliquees !");
     };
@@ -310,6 +324,13 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     type: 'optimized'
                 });
                 setEditingId(initialPost.id);
+                // Restore editor data if available
+                if (initialPost.editorData) {
+                    try {
+                        const ed = JSON.parse(initialPost.editorData);
+                        setSavedEditorData(ed);
+                    } catch { setSavedEditorData(null); }
+                }
                 setStep('preview');
                 toast.success("Post chargé pour édition");
             } catch (e) {
@@ -461,12 +482,16 @@ export function CreationView({ initialPost }: CreationViewProps) {
         const newSlides = slides.filter((_, i) => i !== index);
         const reindexed = newSlides.map((s, i) => ({ ...s, slide_number: i + 1 }));
         setSlides(reindexed);
+        setSavedEditorData(null); // Invalidate editor data when slide structure changes
     };
 
     const handleTextChange = (index: number, text: string) => {
         const newSlides = [...slides];
         newSlides[index] = { ...newSlides[index], text };
         setSlides(newSlides);
+        // Invalidate saved editor data when text is changed outside the editor
+        // since we can't know which text layer the change maps to
+        setSavedEditorData(null);
     };
 
     const handleGenerateCarousel = () => {
@@ -686,9 +711,11 @@ export function CreationView({ initialPost }: CreationViewProps) {
         startTransition(async () => {
             if (!selectedHook) return;
 
+            const editorDataJson = savedEditorData ? JSON.stringify(savedEditorData) : undefined;
+
             if (editingId) {
                 // Update existing post (draft or published)
-                const res = await updatePostContent(editingId, slides, description, asDraft ? 'draft' : 'created');
+                const res = await updatePostContent(editingId, slides, description, asDraft ? 'draft' : 'created', editorDataJson);
                 if (res.error) {
                     toast.error(res.error);
                     return;
@@ -703,11 +730,12 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     setSlides([]);
                     setDescription("");
                     setEditingId(null);
+                    setSavedEditorData(null);
                     loadDrafts();
                 }
             } else {
                 // Create new
-                const res = await saveCarousel(selectedHook.hook, slides, description, asDraft ? 'draft' : 'created');
+                const res = await saveCarousel(selectedHook.hook, slides, description, asDraft ? 'draft' : 'created', undefined, editorDataJson);
                 if (res.error) {
                     toast.error(res.error);
                     return;
@@ -727,6 +755,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     setHooks([]);
                     setSlides([]);
                     setDescription("");
+                    setSavedEditorData(null);
                     loadDrafts();
                 }
             }
@@ -767,6 +796,15 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     setDescription(post.description || "");
                     setSelectedHook({ id: 'draft', angle: 'Draft', hook: post.hookText, reason: 'Resume' });
                     setEditingId(post.id);
+                    // Restore editor data if available
+                    if (post.editorData) {
+                        try {
+                            const ed = JSON.parse(post.editorData);
+                            setSavedEditorData(ed);
+                        } catch { setSavedEditorData(null); }
+                    } else {
+                        setSavedEditorData(null);
+                    }
                     setStep('preview');
                     toast.success(`${parsedSlides.length} slides rechargées avec succès !`);
                 } else {
@@ -812,6 +850,15 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 setDescription(draft.description || "");
                 setSelectedHook({ id: 'draft', angle: 'Draft', hook: draft.hookText, reason: 'Resume' });
                 setEditingId(draft.id);
+                // Restore editor data if available
+                if (draft.editorData) {
+                    try {
+                        const ed = JSON.parse(draft.editorData);
+                        setSavedEditorData(ed);
+                    } catch { setSavedEditorData(null); }
+                } else {
+                    setSavedEditorData(null);
+                }
                 setStep('preview');
             }
 
@@ -1626,74 +1673,190 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             </Button>
 
                             {/* Preview - preserves original image format */}
-                            <div className="bg-black relative group flex-shrink-0 overflow-hidden">
-                                {slide.image_url ? (
-                                    <img src={slide.image_url} className="w-full h-auto block" alt="Slide visual" />
-                                ) : (
-                                    <div className="w-full aspect-square flex items-center justify-center text-muted-foreground bg-muted/20">
-                                        Pas d&apos;image trouvée
-                                    </div>
-                                )}
+                            {(() => {
+                                const editorSlide = savedEditorData?.slides[index];
+                                const cW = savedEditorData?.canvasW || 360;
 
-                                {/* Slide number badge */}
-                                <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded text-xs pointer-events-none z-10">
-                                    {slide.slide_number}/{slides.length}
-                                </div>
+                                // Build CSS filter string from editor filter data
+                                const buildImgFilter = (f: NonNullable<NonNullable<EditorSlide['backgroundImage']>['filter']>) => {
+                                    const parts: string[] = [];
+                                    if (f.brightness !== 100) parts.push(`brightness(${f.brightness}%)`);
+                                    if (f.contrast !== 100) parts.push(`contrast(${f.contrast}%)`);
+                                    if (f.blur > 0) parts.push(`blur(${f.blur}px)`);
+                                    if (f.saturate != null && f.saturate !== 100) parts.push(`saturate(${f.saturate}%)`);
+                                    if (f.hueRotate != null && f.hueRotate !== 0) parts.push(`hue-rotate(${f.hueRotate}deg)`);
+                                    if (f.sepia != null && f.sepia > 0) parts.push(`sepia(${f.sepia}%)`);
+                                    return parts.length > 0 ? parts.join(' ') : undefined;
+                                };
 
-                                {/* TikTok-style text overlay — matches editor default (outline mode) */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center px-3 pointer-events-none z-10">
-                                    {paragraphs.length > 0 ? paragraphs.map((paragraph, pIdx) => {
-                                        const isLastSlide = index === slides.length - 1;
-                                        const fontSize = getAutoFontSize(paragraph, pIdx === 0, index === 0 && pIdx === 0, isLastSlide);
-                                        const topOffset = paragraphPositions[pIdx] || '50%';
-
-                                        // Generate TikTok-authentic outline text-shadow (3-ring system like real TikTok)
-                                        const outlineW = index === 0 && pIdx === 0 ? 1.5 : 1.5;
-                                        const outlineShadows: string[] = [];
-                                        // Outer ring: 24 points for smooth coverage
+                                // Generate text-shadow for a text layer based on its textMode
+                                const buildTextShadow = (tl: TextLayer) => {
+                                    const mode = tl.textMode || 'outline';
+                                    const ow = tl.outlineWidth || 2;
+                                    const oc = tl.outlineColor || '#000';
+                                    const u = (v: number) => `${(v / cW * 100).toFixed(3)}cqi`;
+                                    if (mode === 'outline' || mode === 'caption') {
+                                        const shadows: string[] = [];
                                         for (let s = 0; s < 24; s++) {
                                             const a = (2 * Math.PI * s) / 24;
-                                            outlineShadows.push(`${(Math.cos(a) * outlineW).toFixed(1)}px ${(Math.sin(a) * outlineW).toFixed(1)}px 0 #000`);
+                                            shadows.push(`${u(Math.cos(a) * ow)} ${u(Math.sin(a) * ow)} 0 ${oc}`);
                                         }
-                                        // Middle ring: 16 points at 75% width
-                                        for (let s = 0; s < 16; s++) {
-                                            const a = (2 * Math.PI * s) / 16;
-                                            outlineShadows.push(`${(Math.cos(a) * outlineW * 0.75).toFixed(1)}px ${(Math.sin(a) * outlineW * 0.75).toFixed(1)}px 0 #000`);
+                                        for (let s = 0; s < 12; s++) {
+                                            const a = (2 * Math.PI * s) / 12;
+                                            shadows.push(`${u(Math.cos(a) * ow * 0.6)} ${u(Math.sin(a) * ow * 0.6)} 0 ${oc}`);
                                         }
-                                        // Inner ring: 8 points at 40% width
-                                        for (let s = 0; s < 8; s++) {
-                                            const a = (2 * Math.PI * s) / 8;
-                                            outlineShadows.push(`${(Math.cos(a) * outlineW * 0.4).toFixed(1)}px ${(Math.sin(a) * outlineW * 0.4).toFixed(1)}px 0 #000`);
-                                        }
-                                        outlineShadows.push('0 1px 3px rgba(0,0,0,0.6)');
+                                        shadows.push(`0 ${u(1)} ${u(3)} rgba(0,0,0,0.6)`);
+                                        return shadows.join(', ');
+                                    }
+                                    if (mode === 'shadow') {
+                                        return `${u(ow)} ${u(ow)} ${u(ow * 2)} rgba(0,0,0,0.8)`;
+                                    }
+                                    return undefined; // 'box' mode uses backgroundColor, not shadow
+                                };
 
-                                        return (
-                                            <div
-                                                key={pIdx}
-                                                className="absolute left-3 right-3"
-                                                style={{
-                                                    top: topOffset,
-                                                    transform: 'translateY(-50%)',
-                                                    textAlign: 'center',
-                                                    color: '#ffffff',
-                                                    fontFamily: 'Montserrat, sans-serif',
-                                                    fontWeight: '700',
-                                                    fontSize: `${fontSize}px`,
-                                                    lineHeight: 1.5,
-                                                    textShadow: outlineShadows.join(', '),
-                                                    wordWrap: 'break-word',
-                                                    overflowWrap: 'break-word',
-                                                    whiteSpace: 'pre-wrap',
-                                                }}
-                                            >
-                                                <span dangerouslySetInnerHTML={{ __html: twemojiHtml(paragraph) }} />
+                                const bgFilter = editorSlide?.backgroundImage?.filter ? buildImgFilter(editorSlide.backgroundImage.filter) : undefined;
+                                const bgScale = editorSlide?.backgroundImage?.scale;
+
+                                return (
+                                    <div
+                                        className="bg-black relative group flex-shrink-0 overflow-hidden"
+                                        style={editorSlide ? { containerType: 'inline-size' as const } : undefined}
+                                    >
+                                        {slide.image_url ? (
+                                            <img
+                                                src={slide.image_url}
+                                                className="w-full h-auto block"
+                                                alt="Slide visual"
+                                                style={editorSlide ? {
+                                                    filter: bgFilter,
+                                                    transform: bgScale && bgScale !== 1 ? `scale(${bgScale})` : undefined,
+                                                } : undefined}
+                                            />
+                                        ) : (
+                                            <div className="w-full aspect-square flex items-center justify-center text-muted-foreground bg-muted/20">
+                                                Pas d&apos;image trouvée
                                             </div>
-                                        );
-                                    }) : (
-                                        <span className="text-white/40 text-xs italic">Pas de texte</span>
-                                    )}
-                                </div>
-                            </div>
+                                        )}
+
+                                        {/* Slide number badge */}
+                                        <div className="absolute top-2 right-2 bg-black/60 text-white px-2 py-1 rounded text-xs pointer-events-none z-10">
+                                            {slide.slide_number}/{slides.length}
+                                        </div>
+
+                                        {editorSlide ? (
+                                            /* Rich rendering from saved EditorSlide data — uses container query units (cqi) */
+                                            <div className="absolute inset-0 pointer-events-none z-10">
+                                                {/* Overlay layers */}
+                                                {editorSlide.layers
+                                                    .filter((l): l is OverlayLayer => l.type === 'overlay')
+                                                    .map(ol => (
+                                                        <div key={ol.id} className="absolute inset-0" style={{
+                                                            backgroundColor: ol.backgroundColor,
+                                                            opacity: ol.opacity ?? 1,
+                                                            zIndex: ol.zIndex,
+                                                        }} />
+                                                    ))
+                                                }
+                                                {/* Text layers */}
+                                                {editorSlide.layers
+                                                    .filter((l): l is TextLayer => l.type === 'text')
+                                                    .map(tl => {
+                                                        const fsCqi = `${(tl.fontSize / cW * 100).toFixed(2)}cqi`;
+                                                        const mwCqi = tl.maxWidth ? `${(tl.maxWidth / cW * 100).toFixed(2)}cqi` : undefined;
+                                                        const mode = tl.textMode || 'outline';
+                                                        const isBox = mode === 'box';
+                                                        const padCqi = `${(2 / cW * 100).toFixed(2)}cqi ${(6 / cW * 100).toFixed(2)}cqi`;
+                                                        const brCqi = `${(4 / cW * 100).toFixed(2)}cqi`;
+
+                                                        return (
+                                                            <div
+                                                                key={tl.id}
+                                                                style={{
+                                                                    position: 'absolute',
+                                                                    left: `${tl.x}%`,
+                                                                    top: `${tl.y}%`,
+                                                                    transform: `translate(-50%, -50%)${tl.rotation ? ` rotate(${tl.rotation}deg)` : ''}`,
+                                                                    fontSize: fsCqi,
+                                                                    fontFamily: `${tl.fontFamily || 'Montserrat'}, sans-serif`,
+                                                                    fontWeight: tl.fontWeight || '700',
+                                                                    fontStyle: tl.fontStyle || 'normal',
+                                                                    textAlign: (tl.textAlign || 'center') as React.CSSProperties['textAlign'],
+                                                                    color: tl.color || '#ffffff',
+                                                                    opacity: tl.opacity ?? 1,
+                                                                    lineHeight: tl.lineHeight || 1.5,
+                                                                    letterSpacing: tl.letterSpacing ? `${(tl.letterSpacing / cW * 100).toFixed(3)}cqi` : undefined,
+                                                                    maxWidth: mwCqi,
+                                                                    textShadow: buildTextShadow(tl),
+                                                                    backgroundColor: isBox ? (tl.backgroundColor || 'rgba(0,0,0,0.6)') : undefined,
+                                                                    padding: isBox ? padCqi : undefined,
+                                                                    borderRadius: isBox ? brCqi : undefined,
+                                                                    WebkitBoxDecorationBreak: isBox ? 'clone' : undefined,
+                                                                    boxDecorationBreak: isBox ? ('clone' as any) : undefined,
+                                                                    zIndex: tl.zIndex,
+                                                                    wordWrap: 'break-word',
+                                                                    overflowWrap: 'break-word',
+                                                                    whiteSpace: 'pre-wrap',
+                                                                }}
+                                                            >
+                                                                <span dangerouslySetInnerHTML={{ __html: twemojiHtml(tl.content) }} />
+                                                            </div>
+                                                        );
+                                                    })
+                                                }
+                                            </div>
+                                        ) : (
+                                            /* Fallback: auto-generated TikTok-style overlay */
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center px-3 pointer-events-none z-10">
+                                                {paragraphs.length > 0 ? paragraphs.map((paragraph, pIdx) => {
+                                                    const isLast = index === slides.length - 1;
+                                                    const fontSize = getAutoFontSize(paragraph, pIdx === 0, index === 0 && pIdx === 0, isLast);
+                                                    const topOffset = paragraphPositions[pIdx] || '50%';
+                                                    const outlineW = 1.5;
+                                                    const outlineShadows: string[] = [];
+                                                    for (let s = 0; s < 24; s++) {
+                                                        const a = (2 * Math.PI * s) / 24;
+                                                        outlineShadows.push(`${(Math.cos(a) * outlineW).toFixed(1)}px ${(Math.sin(a) * outlineW).toFixed(1)}px 0 #000`);
+                                                    }
+                                                    for (let s = 0; s < 16; s++) {
+                                                        const a = (2 * Math.PI * s) / 16;
+                                                        outlineShadows.push(`${(Math.cos(a) * outlineW * 0.75).toFixed(1)}px ${(Math.sin(a) * outlineW * 0.75).toFixed(1)}px 0 #000`);
+                                                    }
+                                                    for (let s = 0; s < 8; s++) {
+                                                        const a = (2 * Math.PI * s) / 8;
+                                                        outlineShadows.push(`${(Math.cos(a) * outlineW * 0.4).toFixed(1)}px ${(Math.sin(a) * outlineW * 0.4).toFixed(1)}px 0 #000`);
+                                                    }
+                                                    outlineShadows.push('0 1px 3px rgba(0,0,0,0.6)');
+
+                                                    return (
+                                                        <div
+                                                            key={pIdx}
+                                                            className="absolute left-3 right-3"
+                                                            style={{
+                                                                top: topOffset,
+                                                                transform: 'translateY(-50%)',
+                                                                textAlign: 'center',
+                                                                color: '#ffffff',
+                                                                fontFamily: 'Montserrat, sans-serif',
+                                                                fontWeight: '700',
+                                                                fontSize: `${fontSize}px`,
+                                                                lineHeight: 1.5,
+                                                                textShadow: outlineShadows.join(', '),
+                                                                wordWrap: 'break-word',
+                                                                overflowWrap: 'break-word',
+                                                                whiteSpace: 'pre-wrap',
+                                                            }}
+                                                        >
+                                                            <span dangerouslySetInnerHTML={{ __html: twemojiHtml(paragraph) }} />
+                                                        </div>
+                                                    );
+                                                }) : (
+                                                    <span className="text-white/40 text-xs italic">Pas de texte</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {/* Compact edit area below */}
                             <div className="bg-card p-3 space-y-2 flex flex-col border-t border-border/50">

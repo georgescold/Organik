@@ -50,7 +50,7 @@ import type {
 interface CarouselEditorProps {
     slides: EditorSlide[];
     images: UserImage[];
-    onSave: (slides: EditorSlide[]) => void;
+    onSave: (slides: EditorSlide[], canvasW: number, canvasH: number) => void;
     onBack: () => void;
 }
 
@@ -665,7 +665,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         <span className="hidden sm:inline ml-1.5">Exporter</span>
                     </Button>
-                    <Button size="sm" onClick={() => onSave(slides)} className="bg-primary hover:bg-primary/90">
+                    <Button size="sm" onClick={() => onSave(slides, canvasW, canvasH)} className="bg-primary hover:bg-primary/90">
                         <Save className="h-4 w-4" />
                         <span className="hidden sm:inline ml-1.5">Sauvegarder</span>
                     </Button>

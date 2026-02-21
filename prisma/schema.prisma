@@ -321,7 +321,8 @@ model Post {
   title      String?  
   description String? 
   slideCount Int?
-  slides     String?   // JSON
+  slides     String?   // JSON (Slide[] - basic text + image data)
+  editorData String?   // JSON (EditorSlide[] - full canvas editor state with styling)
 
   origin     String   @default("generated") // generated, imported, scraped
   status     String   @default("draft")     // draft, created, published, rejected, idea, scheduled
