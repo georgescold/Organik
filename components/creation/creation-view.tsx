@@ -1716,16 +1716,20 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
                                 const bgFilter = editorSlide?.backgroundImage?.filter ? buildImgFilter(editorSlide.backgroundImage.filter) : undefined;
                                 const bgScale = editorSlide?.backgroundImage?.scale;
+                                const cH = savedEditorData?.canvasH || 640;
 
                                 return (
                                     <div
                                         className="bg-black relative group flex-shrink-0 overflow-hidden"
-                                        style={editorSlide ? { containerType: 'inline-size' as const } : undefined}
+                                        style={editorSlide ? {
+                                            containerType: 'inline-size' as const,
+                                            aspectRatio: `${cW} / ${cH}`,
+                                        } : undefined}
                                     >
                                         {slide.image_url ? (
                                             <img
                                                 src={slide.image_url}
-                                                className="w-full h-auto block"
+                                                className={editorSlide ? "absolute inset-0 w-full h-full object-cover" : "w-full h-auto block"}
                                                 alt="Slide visual"
                                                 style={editorSlide ? {
                                                     filter: bgFilter,
