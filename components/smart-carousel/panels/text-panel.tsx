@@ -207,7 +207,7 @@ export function TextPanel({ layer, onUpdate, onSaveAsDefault }: TextPanelProps) 
                             onClick={() => {
                                 const updates: Partial<TextLayer> = { textMode: mode.value };
                                 if (mode.value === 'outline') {
-                                    updates.outlineWidth = layer.outlineWidth || 1.5;
+                                    updates.outlineWidth = layer.outlineWidth || 2;
                                     updates.outlineColor = layer.outlineColor || '#000000';
                                     updates.color = '#ffffff';
                                     updates.backgroundColor = '#00000000';

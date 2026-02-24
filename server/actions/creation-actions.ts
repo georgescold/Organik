@@ -1537,16 +1537,19 @@ export async function saveCarousel(hook: string, slides: Slide[], description: s
         if (!activeProfileId) return { error: 'No active profile found. Please select a profile first.' };
 
         // [NEW] 1. Check for Duplicate Hook (within same profile)
+        // Exclude 'idea' status — ideas are just saved hooks without content,
+        // and should be upgradeable to drafts/posts with the same hookText.
         const existingPost = await prisma.post.findFirst({
             where: {
                 userId: finalUserId,
                 profileId: activeProfileId,
-                hookText: hook
+                hookText: hook,
+                status: { notIn: ['idea'] }
             }
         });
 
         if (existingPost) {
-            return { error: 'Duplicate post detected: A post with this hook already exists.' };
+            return { error: 'Un post avec ce hook existe déjà.' };
         }
 
         // [NEW] 2. Check for Duplicate Images in Slides

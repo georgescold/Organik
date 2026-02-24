@@ -18,7 +18,17 @@ import { WeeklyPlan } from './weekly-plan';
 export async function AnalyticsView() {
     const stats = await getDashboardStats();
 
-    if (!stats) return <div>Loading...</div>;
+    if (!stats) return (
+        <div className="space-y-6 animate-pulse">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-28 bg-muted rounded-lg" />
+                ))}
+            </div>
+            <div className="h-64 bg-muted rounded-lg" />
+            <div className="h-48 bg-muted rounded-lg" />
+        </div>
+    );
 
     const { posts, topPosts } = stats;
     // Safe defaults for new analytics fields
@@ -28,7 +38,9 @@ export async function AnalyticsView() {
     const saveRate = stats.stats.saveRate ?? 0;
     const followerGrowthRate = stats.stats.followerGrowthRate ?? 0;
     const followerGrowthDirection = stats.stats.followerGrowthDirection ?? 'neutral';
-    const today = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const now = new Date();
+    const today = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const syncTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
     return (
         <div className="space-y-8 sm:space-y-10">
@@ -36,7 +48,7 @@ export async function AnalyticsView() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="space-y-1">
                     <h2 className="text-xl sm:text-2xl font-black tracking-tight">Performance</h2>
-                    <p className="text-xs sm:text-sm text-muted-foreground capitalize">{today}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground capitalize">{today} — <span className="normal-case">dernière synchro à {syncTime}</span></p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     <SyncButton />
@@ -45,6 +57,9 @@ export async function AnalyticsView() {
             </div>
 
             {/* ── Stats Cards ── */}
+            {/* TODO: Consider migrating hardcoded hsl() chart colors below to CSS variables
+                or theme tokens (e.g. var(--chart-1)) for better dark/light mode support
+                and centralized theming. */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                 <MetricHistoryCard
                     title="Vues"
@@ -53,7 +68,7 @@ export async function AnalyticsView() {
                     trend={stats.stats.views > 0 ? Math.round((stats.stats.views / stats.stats.totalViews) * 100) : 0}
                     trendDirection="up"
                     data={stats.history.views}
-                    chartColor="hsl(348, 90%, 55%)"
+                    chartColor="hsl(348, 90%, 55%)" /* hardcoded — future: use CSS variable */
                     rangeOptions={[
                         { key: '7d', label: '7J' },
                         { key: '30d', label: '30J' },
@@ -69,7 +84,7 @@ export async function AnalyticsView() {
                     data={stats.history.followers}
                     editable={true}
                     onSave={updateFollowers}
-                    chartColor="hsl(348, 80%, 65%)"
+                    chartColor="hsl(348, 80%, 65%)" /* hardcoded — future: use CSS variable */
                     rangeOptions={[
                         { key: '30d', label: '1M' },
                         { key: '6m', label: '6M' },
@@ -84,7 +99,7 @@ export async function AnalyticsView() {
                     trend={0}
                     trendDirection="neutral"
                     data={stats.history.likes || []}
-                    chartColor="hsl(15, 90%, 55%)"
+                    chartColor="hsl(15, 90%, 55%)" /* hardcoded — future: use CSS variable */
                     rangeOptions={[
                         { key: '7d', label: '7J' },
                         { key: '30d', label: '1M' },
@@ -99,7 +114,7 @@ export async function AnalyticsView() {
                     trend={0}
                     trendDirection="neutral"
                     data={stats.history.saves || []}
-                    chartColor="hsl(340, 70%, 45%)"
+                    chartColor="hsl(340, 70%, 45%)" /* hardcoded — future: use CSS variable */
                     rangeOptions={[
                         { key: '7d', label: '7J' },
                         { key: '30d', label: '1M' },

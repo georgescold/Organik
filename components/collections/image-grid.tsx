@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useState, useTransition } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, Loader2, AlertCircle, CheckCircle2, X, FolderPlus, MinusCircle } from 'lucide-react';
+import { Trash2, Loader2, AlertCircle, CheckCircle2, X, FolderPlus, MinusCircle, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { deleteImage, deleteImages } from '@/server/actions/image-actions';
 import { removeImageFromCollection, removeImagesFromCollection } from '@/server/actions/collection-actions';
@@ -41,7 +41,8 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
     const [selectedImage, setSelectedImage] = useState<ClientImage | null>(null);
     const [imageToAdd, setImageToAdd] = useState<string | null>(null);
     const [isBatchAddOpen, setIsBatchAddOpen] = useState(false);
-    const [isPending, startTransition] = useTransition();
+    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+    const [isAddingToCollection, startAddTransition] = useTransition();
 
     // Bulk Selection State
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -67,29 +68,37 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
 
     const handleBulkDelete = async () => {
         if (collectionId) {
-            if (!confirm(`Retirer ${selectedIds.size} images de la collection ? (Elles resteront dans la galerie générale)`)) return;
-            startTransition(async () => {
-                const result = await removeImagesFromCollection(collectionId, Array.from(selectedIds));
+            if (!confirm(`Retirer ${selectedIds.size} image(s) de cette collection ? Elles resteront dans la galerie générale.`)) return;
+            const ids = Array.from(selectedIds);
+            setDeletingIds(prev => new Set([...prev, ...ids]));
+            try {
+                const result = await removeImagesFromCollection(collectionId, ids);
                 if (result.success) {
-                    toast.success(`${selectedIds.size} images retirées`);
+                    toast.success(`${ids.length} images retirées`);
                     setSelectedIds(new Set());
                     setIsSelectionMode(false);
                 } else {
                     toast.error('Erreur lors du retrait');
                 }
-            });
+            } finally {
+                setDeletingIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
+            }
         } else {
-            if (!confirm(`Supprimer DÉFINITIVEMENT ${selectedIds.size} images ?`)) return;
-            startTransition(async () => {
-                const result = await deleteImages(Array.from(selectedIds));
+            if (!confirm(`Supprimer définitivement ${selectedIds.size} image(s) ? Cette action est irréversible.`)) return;
+            const ids = Array.from(selectedIds);
+            setDeletingIds(prev => new Set([...prev, ...ids]));
+            try {
+                const result = await deleteImages(ids);
                 if (result.success) {
-                    toast.success(`${selectedIds.size} images supprimées`);
+                    toast.success(`${ids.length} images supprimées`);
                     setSelectedIds(new Set());
                     setIsSelectionMode(false);
                 } else {
                     toast.error('Erreur lors de la suppression');
                 }
-            });
+            } finally {
+                setDeletingIds(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next; });
+            }
         }
     };
 
@@ -97,8 +106,9 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
         e.stopPropagation();
 
         if (collectionId) {
-            if (!confirm('Retirer cette image de la collection ?')) return;
-            startTransition(async () => {
+            if (!confirm('Retirer cette image de la collection ? Elle restera dans la galerie générale.')) return;
+            setDeletingIds(prev => new Set([...prev, img.id]));
+            try {
                 const result = await removeImageFromCollection(collectionId, img.id);
                 if (result.success) {
                     toast.success('Image retirée');
@@ -106,10 +116,13 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                 } else {
                     toast.error('Erreur lors du retrait');
                 }
-            });
+            } finally {
+                setDeletingIds(prev => { const next = new Set(prev); next.delete(img.id); return next; });
+            }
         } else {
-            if (!confirm('Êtes-vous sûr de vouloir supprimer cette image DÉFINITIVEMENT ?')) return;
-            startTransition(async () => {
+            if (!confirm('Supprimer définitivement cette image ? Cette action est irréversible.')) return;
+            setDeletingIds(prev => new Set([...prev, img.id]));
+            try {
                 const result = await deleteImage(img.id, img.storageUrl);
                 if (result.success) {
                     toast.success('Image supprimée');
@@ -117,7 +130,9 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                 } else {
                     toast.error('Erreur lors de la suppression');
                 }
-            });
+            } finally {
+                setDeletingIds(prev => { const next = new Set(prev); next.delete(img.id); return next; });
+            }
         }
     };
 
@@ -144,7 +159,7 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                         </Button>
                         <Button
                             variant="secondary"
-                            disabled={selectedIds.size === 0 || isPending}
+                            disabled={selectedIds.size === 0 || isAddingToCollection}
                             onClick={() => setIsBatchAddOpen(true)}
                         >
                             <FolderPlus className="w-4 h-4 mr-2" />
@@ -152,10 +167,10 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                         </Button>
                         <Button
                             variant="destructive"
-                            disabled={selectedIds.size === 0 || isPending}
+                            disabled={selectedIds.size === 0 || deletingIds.size > 0}
                             onClick={handleBulkDelete}
                         >
-                            {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            {deletingIds.size > 0 && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                             {collectionId ? (
                                 <>
                                     <MinusCircle className="w-4 h-4 mr-2" />
@@ -172,9 +187,18 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                 )}
             </div>
 
+            {images.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <ImageIcon className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                    <p className="text-muted-foreground font-medium">Aucune image</p>
+                    <p className="text-sm text-muted-foreground/60 mt-1">Uploadez des images pour commencer</p>
+                </div>
+            )}
+
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 mt-4">
                 {images.map((img) => {
                     const isSelected = selectedIds.has(img.id);
+                    const isDeleting = deletingIds.has(img.id);
 
                     return (
                         <Card
@@ -182,7 +206,8 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                             className={cn(
                                 "group relative overflow-hidden aspect-square cursor-pointer border-0 transition-all duration-200",
                                 isSelectionMode && isSelected && "ring-4 ring-primary ring-offset-2",
-                                isSelectionMode && !isSelected && "opacity-60 grayscale"
+                                isSelectionMode && !isSelected && "opacity-60 grayscale",
+                                isDeleting && "opacity-30 pointer-events-none scale-95 transition-all"
                             )}
                             onClick={() => {
                                 if (isSelectionMode) {
@@ -191,6 +216,15 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                                     setSelectedImage(img);
                                 }
                             }}
+                            tabIndex={isSelectionMode ? 0 : undefined}
+                            onKeyDown={isSelectionMode ? (e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    toggleSelection(img.id);
+                                }
+                            } : undefined}
+                            role={isSelectionMode ? "checkbox" : undefined}
+                            aria-checked={isSelectionMode ? isSelected : undefined}
                         >
                             <ImageWithFallback
                                 src={img.storageUrl}
@@ -223,6 +257,7 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                                                 setImageToAdd(img.id);
                                             }}
                                             title="Ajouter à une collection"
+                                            aria-label="Ajouter à une collection"
                                         >
                                             <FolderPlus className="h-4 w-4" />
                                         </Button>
@@ -231,10 +266,11 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                                             size="icon"
                                             className="h-9 w-9 rounded-full md:opacity-0 md:group-hover:opacity-100 transition-opacity shadow-lg touch-manipulation"
                                             onClick={(e) => handleDelete(e, img)}
-                                            disabled={isPending}
+                                            disabled={isDeleting}
                                             title={collectionId ? "Retirer de la collection" : "Supprimer"}
+                                            aria-label={collectionId ? "Retirer de la collection" : "Supprimer l'image"}
                                         >
-                                            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> :
+                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> :
                                                 (collectionId ? <MinusCircle className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />)
                                             }
                                         </Button>

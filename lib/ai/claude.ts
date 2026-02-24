@@ -45,7 +45,14 @@ export async function analyzeImage(imageBase64: string, mediaType: string = "ima
         // Simple basic cleanup if markdown is present
         const cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
 
-        return JSON.parse(cleanJson);
+        try {
+            return JSON.parse(cleanJson);
+        } catch (parseError) {
+            // Claude sometimes returns a text refusal instead of JSON
+            // (e.g. "I'm not able to analyze this image")
+            console.error("Claude returned non-JSON response:", cleanJson.slice(0, 200));
+            throw new Error(`Claude did not return valid JSON. Response: "${cleanJson.slice(0, 100)}"`);
+        }
     } catch (error) {
         console.error("Claude Analysis Error:", error);
         throw error; // Rethrow to allow upstream handling (e.g. invalid user key)
@@ -169,5 +176,11 @@ export async function analyzePostContent(images: string[], textContext: string, 
 
     const text = (msg.content[0] as any).text;
     const cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(cleanJson);
+
+    try {
+        return JSON.parse(cleanJson);
+    } catch (parseError) {
+        console.error("Claude returned non-JSON response for post analysis:", cleanJson.slice(0, 200));
+        throw new Error(`Claude did not return valid JSON. Response: "${cleanJson.slice(0, 100)}"`);
+    }
 }

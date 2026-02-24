@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useTransition } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { uploadImage } from '@/server/actions/image-actions';
@@ -14,7 +14,7 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderProps) {
-    const [isUploading, startTransition] = useTransition();
+    const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [progress, setProgress] = useState(0);
     const [dragActive, setDragActive] = useState(false);
@@ -85,45 +85,50 @@ export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderPr
             return 0;
         };
 
-        startTransition(async () => {
-            for (let i = 0; i < total; i += BATCH_SIZE) {
-                if (cancelRef.current) {
-                    toast.info("Upload annulé");
-                    break;
+        setIsUploading(true);
+        (async () => {
+            try {
+                for (let i = 0; i < total; i += BATCH_SIZE) {
+                    if (cancelRef.current) {
+                        toast.info("Upload annulé");
+                        break;
+                    }
+
+                    const batch = allFiles.slice(i, i + BATCH_SIZE);
+                    const currentProgress = Math.round((uploadedCount / total) * 100);
+                    setProgress(Math.max(10, currentProgress));
+
+                    const processed = await processBatch(batch);
+                    uploadedCount += processed;
+                    setUploadedCountState(uploadedCount);
                 }
 
-                const batch = allFiles.slice(i, i + BATCH_SIZE);
-                const currentProgress = Math.round((uploadedCount / total) * 100);
-                setProgress(Math.max(10, currentProgress));
+                setProgress(100);
+                if (!cancelRef.current) {
+                    if (uploadedCount > 0) {
+                        toast.success(`${uploadedCount}/${total} images ajoutées avec succès !`);
+                    }
 
-                const processed = await processBatch(batch);
-                uploadedCount += processed;
-                setUploadedCountState(uploadedCount);
+                    if (errors.length > 0) {
+                        // Show distinct errors (e.g. "Missing API Key")
+                        const uniqueErrors = Array.from(new Set(errors));
+                        uniqueErrors.forEach(err => toast.error(err));
+                    } else if (uploadedCount === 0) {
+                        toast.error("Échec de l'upload. Vérifiez votre connexion ou la taille des fichiers.");
+                    }
+
+                    if (onUploadSuccess) onUploadSuccess();
+                }
+            } finally {
+                setIsUploading(false);
+                setTimeout(() => {
+                    setProgress(0);
+                    setUploadedCountState(0);
+                    setTotalFilesState(0);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                }, 1000);
             }
-
-            setProgress(100);
-            if (!cancelRef.current) {
-                if (uploadedCount > 0) {
-                    toast.success(`${uploadedCount}/${total} images ajoutées avec succès !`);
-                }
-
-                if (errors.length > 0) {
-                    // Show distinct errors (e.g. "Missing API Key")
-                    const uniqueErrors = Array.from(new Set(errors));
-                    uniqueErrors.forEach(err => toast.error(err));
-                } else if (uploadedCount === 0) {
-                    toast.error("Échec de l'upload. Vérifiez votre connexion ou la taille des fichiers.");
-                }
-
-                if (onUploadSuccess) onUploadSuccess();
-            }
-            setTimeout(() => {
-                setProgress(0);
-                setUploadedCountState(0);
-                setTotalFilesState(0);
-                if (fileInputRef.current) fileInputRef.current.value = '';
-            }, 1000);
-        });
+        })();
     };
 
     return (

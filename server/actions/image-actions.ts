@@ -37,35 +37,15 @@ export async function uploadImage(formData: FormData) {
 
     // Function to process a single file
     const processFile = async (file: File) => {
-        if (file.size > MAX_FILE_SIZE) return { error: `File ${file.name} too large (max 5MB)` };
+        if (file.size > MAX_FILE_SIZE) return { error: `Le fichier ${file.name} est trop volumineux (max 20MB)` };
 
         try {
             const buffer = Buffer.from(await file.arrayBuffer());
 
-            // [Checks] Calculate Hash & Check for duplicate
+            // Calculate hash for dedup
             const hash = createHash('sha256').update(buffer).digest('hex');
-            const existingImage = await prisma.image.findFirst({
-                where: {
-                    userId: userId,
-                    OR: [
-                        { hash: hash },
-                        { filename: file.name }
-                    ]
-                }
-            });
 
-            if (existingImage) {
-                // If in a collection context, ensure it's linked
-                if (collectionId) {
-                    await prisma.collection.update({
-                        where: { id: collectionId },
-                        data: { images: { connect: { id: existingImage.id } } }
-                    }).catch(() => { });
-                }
-                return { success: true, file: file.name, duplicate: true };
-            }
-
-            // 1. Save to Supabase Storage
+            // 1. Save to Supabase Storage (before DB — idempotent with uuidv4 path)
             const ext = file.name.split('.').pop();
             const uuid = uuidv4();
             const filename = `${uuid}.${ext}`;
@@ -115,22 +95,50 @@ export async function uploadImage(formData: FormData) {
                 };
             }
 
-            await prisma.image.create({
-                data: {
-                    user: { connect: { id: session.user!.id } },
-                    humanId,
-                    storageUrl: publicUrl,
-                    hash,
-                    filename: file.name,
-                    descriptionLong: analysis.description_long || "No description",
-                    keywords: JSON.stringify(analysis.keywords || []),
-                    mood: analysis.mood,
-                    style: analysis.style,
-                    colors: JSON.stringify(analysis.colors || []),
-                    qualityScore: analysis.quality_score ?? 5,
-                    collections: collectionId ? { connect: { id: collectionId } } : undefined
-                },
-            });
+            // 4. Insert into DB — use try/catch on unique constraint (P2002)
+            // to handle TOCTOU race condition when same file is uploaded concurrently.
+            // Instead of findFirst→create (vulnerable window), we attempt create directly
+            // and gracefully handle the duplicate case.
+            try {
+                await prisma.image.create({
+                    data: {
+                        user: { connect: { id: session.user!.id } },
+                        humanId,
+                        storageUrl: publicUrl,
+                        hash,
+                        filename: file.name,
+                        descriptionLong: analysis.description_long || "No description",
+                        keywords: JSON.stringify(analysis.keywords || []),
+                        mood: analysis.mood,
+                        style: analysis.style,
+                        colors: JSON.stringify(analysis.colors || []),
+                        qualityScore: analysis.quality_score ?? 5,
+                        collections: collectionId ? { connect: { id: collectionId } } : undefined
+                    },
+                });
+            } catch (createError) {
+                // P2002 = unique constraint violation (duplicate hash or filename for this user)
+                if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === 'P2002') {
+                    // Duplicate detected — clean up the Supabase file we just uploaded
+                    await supabaseAdmin.storage.from(SUPABASE_BUCKET).remove([storagePath]).catch(() => {});
+
+                    // Link existing image to collection if needed
+                    if (collectionId) {
+                        const existingImage = await prisma.image.findFirst({
+                            where: { userId, hash },
+                            select: { id: true }
+                        });
+                        if (existingImage) {
+                            await prisma.collection.update({
+                                where: { id: collectionId },
+                                data: { images: { connect: { id: existingImage.id } } }
+                            }).catch(() => {});
+                        }
+                    }
+                    return { success: true, file: file.name, duplicate: true };
+                }
+                throw createError; // Re-throw non-duplicate errors
+            }
 
             return { success: true, file: file.name };
         } catch (e) {
@@ -154,7 +162,7 @@ export async function uploadImage(formData: FormData) {
     return { success: true, count: successCount, total: files.length, results };
 }
 
-export async function getUserImages(collectionId?: string) {
+export async function getUserImages(collectionId?: string, page: number = 1, limit: number = 100) {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
@@ -163,25 +171,30 @@ export async function getUserImages(collectionId?: string) {
             ? { collections: { some: { id: collectionId } } }
             : {}; // Shared Collection: Fetch all images regardless of user if no collection specified
 
-        const imagesRaw = await prisma.image.findMany({
-            where: whereClause,
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                humanId: true,
-                userId: true,
-                filename: true,
-                storageUrl: true,
-                descriptionLong: true,
-                keywords: true,
-                mood: true,
-                style: true,
-                colors: true,
-                qualityScore: true,
-                createdAt: true,
-                collections: { select: { id: true, name: true } }
-            }
-        });
+        const [imagesRaw, total] = await Promise.all([
+            prisma.image.findMany({
+                where: whereClause,
+                orderBy: { createdAt: 'desc' },
+                take: limit,
+                skip: (page - 1) * limit,
+                select: {
+                    id: true,
+                    humanId: true,
+                    userId: true,
+                    filename: true,
+                    storageUrl: true,
+                    descriptionLong: true,
+                    keywords: true,
+                    mood: true,
+                    style: true,
+                    colors: true,
+                    qualityScore: true,
+                    createdAt: true,
+                    collections: { select: { id: true, name: true } }
+                }
+            }),
+            prisma.image.count({ where: whereClause })
+        ]);
 
         // Parse JSON strings to arrays for keywords and colors
         const images = imagesRaw.map(img => ({
@@ -190,7 +203,7 @@ export async function getUserImages(collectionId?: string) {
             colors: JSON.parse(img.colors || '[]') as string[],
         }));
 
-        return { success: true, images };
+        return { success: true, images, total, page, limit };
     } catch (e) {
         return { error: 'Failed to fetch images' };
     }
@@ -205,24 +218,42 @@ export async function deleteImage(imageId: string, storageUrl: string) {
         await prisma.image.delete({
             where: { id: imageId, userId: session.user.id }
         });
-
-        // Delete from Supabase Storage in background (non-blocking)
-        try {
-            const url = new URL(storageUrl);
-            const pathParts = url.pathname.split('/storage/v1/object/public/images/');
-            if (pathParts.length > 1) {
-                supabaseAdmin.storage.from(SUPABASE_BUCKET).remove([pathParts[1]]);
-            }
-        } catch (e) {
-            console.error("Failed to delete from Supabase Storage:", e);
+    } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+            // Record already deleted (concurrent delete) or not owned by user
+            // Treat as idempotent success — the image is gone, which is the goal
+            revalidatePath('/dashboard', 'page');
+            return { success: true };
         }
+        return { error: 'Failed to delete image' };
+    }
 
+    try {
+        // Delete from Supabase Storage with retry
+        const url = new URL(storageUrl);
+        const pathParts = url.pathname.split('/storage/v1/object/public/images/');
+        if (pathParts.length > 1) {
+            const storagePath = pathParts[1];
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    const { error: storageError } = await supabaseAdmin.storage.from(SUPABASE_BUCKET).remove([storagePath]);
+                    if (!storageError) break;
+                    console.error(`Supabase delete attempt ${attempt + 1} failed:`, storageError);
+                } catch (e) {
+                    console.error(`Supabase delete attempt ${attempt + 1} error:`, e);
+                }
+                if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            }
+        }
+    } catch (e) {
+        // Storage cleanup failure is non-critical — DB record is already deleted
+        console.error("Supabase storage cleanup error:", e);
+    }
+
+    try {
         revalidatePath('/dashboard', 'page');
         return { success: true };
     } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
-            return { error: 'Access denied' };
-        }
         return { error: 'Failed to delete image' };
     }
 }
@@ -247,7 +278,7 @@ export async function deleteImages(imageIds: string[]) {
             where: { id: { in: imageIds }, userId: session.user.id }
         });
 
-        // Delete from Supabase Storage (non-blocking)
+        // Delete from Supabase Storage with retry
         const storagePaths: string[] = [];
         for (const img of images) {
             try {
@@ -257,7 +288,16 @@ export async function deleteImages(imageIds: string[]) {
             } catch {}
         }
         if (storagePaths.length > 0) {
-            supabaseAdmin.storage.from(SUPABASE_BUCKET).remove(storagePaths);
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    const { error: storageError } = await supabaseAdmin.storage.from(SUPABASE_BUCKET).remove(storagePaths);
+                    if (!storageError) break;
+                    console.error(`Supabase bulk delete attempt ${attempt + 1} failed:`, storageError);
+                } catch (e) {
+                    console.error(`Supabase bulk delete attempt ${attempt + 1} error:`, e);
+                }
+                if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            }
         }
 
         revalidatePath('/dashboard', 'page');

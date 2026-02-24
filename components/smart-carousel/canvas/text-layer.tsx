@@ -142,7 +142,7 @@ export function TextLayerContent({
 
     const textStyles: React.CSSProperties = {
         fontSize: `${layer.fontSize}px`,
-        fontFamily: layer.fontFamily,
+        fontFamily: `${layer.fontFamily}, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif`,
         fontWeight: layer.fontWeight,
         fontStyle: layer.fontStyle,
         textAlign: layer.textAlign,

@@ -97,7 +97,7 @@ export function SmartCarouselGenerator({ images = [], onSave }: SmartCarouselGen
                     textAlign: 'center' as const,
                     color: slide.textColor,
                     outlineColor: '#000000',
-                    outlineWidth: 1.5,
+                    outlineWidth: 2,
                     lineHeight: 1.5,
                     maxWidth: 300,
                     textMode: 'outline' as const,

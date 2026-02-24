@@ -97,13 +97,22 @@ export function Sidebar({
     }, [userId]);
 
     const loadFolders = async () => {
-        setLoading(false);
+        setLoading(true);
         try {
             const result = await getFolders(userId);
             if (result.success && result.folders) {
                 setFolders(result.folders as FolderWithProfiles[]);
-                // Expand all folders by default
-                setExpandedFolders(new Set(result.folders.map((f: any) => f.id)));
+                // Only expand all folders by default on first load (no saved state)
+                const saved = localStorage.getItem('sidebar-expanded-folders');
+                if (saved) {
+                    try {
+                        setExpandedFolders(new Set(JSON.parse(saved)));
+                    } catch {
+                        setExpandedFolders(new Set(result.folders.map((f: any) => f.id)));
+                    }
+                } else {
+                    setExpandedFolders(new Set(result.folders.map((f: any) => f.id)));
+                }
             }
         } catch (error) {
             console.error('Error loading folders:', error);
@@ -135,9 +144,17 @@ export function Sidebar({
     };
 
     const handleDeleteFolder = async (folderId: string) => {
+        if (!confirm('Supprimer ce dossier ? Les profils ne seront pas supprimés.')) return;
         await deleteFolder(folderId);
         loadFolders();
     };
+
+    // Persist folder expansion state to localStorage
+    useEffect(() => {
+        if (expandedFolders.size > 0 || folders.length > 0) {
+            localStorage.setItem('sidebar-expanded-folders', JSON.stringify(Array.from(expandedFolders)));
+        }
+    }, [expandedFolders, folders.length]);
 
     const toggleFolder = (folderId: string) => {
         setExpandedFolders(prev => {
@@ -167,6 +184,7 @@ export function Sidebar({
                         size="sm"
                         onClick={() => setIsCreateDialogOpen(true)}
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
+                        aria-label="Créer un dossier"
                     >
                         <FolderPlus className="h-3.5 w-3.5" />
                     </Button>

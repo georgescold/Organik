@@ -492,12 +492,14 @@ function ResizeHandles({ onResizeStart, onResizeSideStart, onRotateStart, showRe
                         className={cn(sideClass, "-right-2 md:-right-1 top-1/2 -translate-y-1/2")}
                         onMouseDown={onResizeSideStart}
                         onTouchStart={onResizeSideStart}
+                        aria-label="Redimensionner"
                     />
                     <div
                         data-export-ignore="true"
                         className={cn(sideClass, "-left-2 md:-left-1 top-1/2 -translate-y-1/2")}
                         onMouseDown={onResizeSideStart}
                         onTouchStart={onResizeSideStart}
+                        aria-label="Redimensionner"
                     />
                 </>
             )}
@@ -510,6 +512,7 @@ function ResizeHandles({ onResizeStart, onResizeSideStart, onRotateStart, showRe
                     onMouseDown={onResizeStart}
                     onTouchStart={onResizeStart}
                     title="Glisser pour redimensionner"
+                    aria-label="Redimensionner"
                 >
                     <svg className="w-full h-full p-1 md:p-0.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                         <path d="M21 21L12 12M21 21V15M21 21H15" />
@@ -533,6 +536,7 @@ function ResizeHandles({ onResizeStart, onResizeSideStart, onRotateStart, showRe
                         onMouseDown={onRotateStart}
                         onTouchStart={onRotateStart}
                         title="Glisser pour tourner"
+                        aria-label="Faire pivoter"
                     >
                         <svg className="w-3.5 h-3.5 md:w-2.5 md:h-2.5 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                             <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8" />

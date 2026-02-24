@@ -553,9 +553,11 @@ export async function updatePost(postId: string, data: { title?: string; descrip
             };
         }
 
-        await prisma.post.update({
-            where: { id: postId, userId: session.user.id },
-            data: updateData
+        await prisma.$transaction(async (tx) => {
+            await tx.post.update({
+                where: { id: postId, userId: session.user!.id },
+                data: updateData
+            });
         });
         revalidatePath('/dashboard');
         return { success: true };

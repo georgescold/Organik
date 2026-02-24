@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +31,37 @@ export function OnboardingModal() {
     // So this component will handle the Overlay + Modal
     const [showOverlay, setShowOverlay] = useState(true);
 
+    // Load draft from localStorage on mount
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('onboarding-draft');
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.formData) {
+                    setFormData(prev => ({
+                        ...prev,
+                        ...(data.formData.tiktokName && { tiktokName: data.formData.tiktokName }),
+                        ...(data.formData.tiktokBio && { tiktokBio: data.formData.tiktokBio }),
+                        ...(data.formData.persona && { persona: data.formData.persona }),
+                        ...(data.formData.targetAudience && { targetAudience: data.formData.targetAudience }),
+                        ...(data.formData.leadMagnet && { leadMagnet: data.formData.leadMagnet }),
+                    }));
+                }
+                if (data.step) setStep(data.step);
+            }
+        } catch {}
+    }, []);
+
+    // Save draft to localStorage on change
+    useEffect(() => {
+        try {
+            localStorage.setItem('onboarding-draft', JSON.stringify({
+                formData,
+                step,
+            }));
+        } catch {}
+    }, [formData, step]);
+
     const handleNext = () => setStep(step + 1);
     const handleBack = () => setStep(step - 1);
 
@@ -40,6 +71,7 @@ export function OnboardingModal() {
             if (result.error) {
                 toast.error(result.error);
             } else {
+                localStorage.removeItem('onboarding-draft');
                 toast.success("Profil créé avec succès !");
                 setShowOverlay(false);
                 setOpen(false);
@@ -240,9 +272,14 @@ export function OnboardingModal() {
                         )}
 
                         {step < 5 ? (
-                            <Button onClick={handleNext} disabled={!formData.tiktokName && step === 1}>Suivant</Button>
+                            <Button onClick={handleNext} disabled={
+                                (step === 1 && !formData.tiktokName.trim()) ||
+                                (step === 2 && !formData.tiktokBio.trim()) ||
+                                (step === 3 && !formData.persona.trim()) ||
+                                (step === 4 && !formData.targetAudience.trim())
+                            }>Suivant</Button>
                         ) : (
-                            <Button onClick={handleSubmit} disabled={isPending} className="bg-primary text-primary-foreground">
+                            <Button onClick={handleSubmit} disabled={isPending || !formData.leadMagnet.trim()} className="bg-primary text-primary-foreground">
                                 {isPending ? 'Enregistrement...' : 'Valider'}
                             </Button>
                         )}

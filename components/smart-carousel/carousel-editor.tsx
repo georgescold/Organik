@@ -194,7 +194,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
         const updateScale = () => {
             const containerW = container.clientWidth - 16; // padding
             // On mobile, account for the fixed toolbar overlay (100px bottom padding)
-            const isMobile = window.innerWidth < 768;
+            const isMobile = window.matchMedia('(max-width: 767.5px)').matches;
             const containerH = container.clientHeight - (isMobile ? 100 : 16);
             const scale = Math.min(containerW / canvasW, containerH / canvasH, 1);
             setCanvasScale(scale);
@@ -258,6 +258,16 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [selectedLayerId, selectedLayer, undo, redo]);
 
+    // Warn about unsaved changes on page exit
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, []);
+
     // ============================================
     // Slide Operations
     // ============================================
@@ -291,6 +301,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             toast.error("Impossible de supprimer la dernière slide");
             return;
         }
+        if (!confirm('Supprimer cette slide ?')) return;
         setSlides(prev => {
             const next = prev.filter((_, idx) => idx !== index);
             const newActive = Math.min(activeSlideIndex, next.length - 1);
@@ -335,7 +346,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             textAlign: d?.textAlign ?? 'center',
             color: d?.color ?? '#ffffff',
             outlineColor: d?.outlineColor ?? '#000000',
-            outlineWidth: d?.outlineWidth ?? 1.5,
+            outlineWidth: d?.outlineWidth ?? 2,
             lineHeight: d?.lineHeight ?? 1.5,
             maxWidth: 300,
             textMode: (d?.textMode as any) ?? 'outline',
@@ -534,8 +545,137 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 }
 
                 // Draw text layers
-                const scaleX = W / canvasW; // editor canvas width
-                const scaleY = H / canvasH; // editor canvas height
+                const scaleX = W / canvasW;
+                const scaleY = H / canvasH;
+
+                // Emoji regex — skip outline/shadow on emoji characters
+                const emojiRx = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/gu;
+
+                // Helper: draw rounded rectangle (for box/caption backgrounds)
+                const fillRoundRect = (rx: number, ry: number, rw: number, rh: number, radius: number) => {
+                    const r = Math.min(radius, rw / 2, rh / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(rx + r, ry);
+                    ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+                    ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
+                    ctx.arcTo(rx, ry + rh, rx, ry, r);
+                    ctx.arcTo(rx, ry, rx + rw, ry, r);
+                    ctx.closePath();
+                    ctx.fill();
+                };
+
+                // Helper: TikTok-style multi-ring outline (matches preview text-shadow)
+                const drawMultiRingOutline = (text: string, tx: number, ty: number, ow: number, oc: string) => {
+                    ctx.save();
+                    ctx.fillStyle = oc;
+                    // Outer ring — 24 points
+                    for (let i = 0; i < 24; i++) {
+                        const a = (2 * Math.PI * i) / 24;
+                        ctx.fillText(text, tx + Math.cos(a) * ow, ty + Math.sin(a) * ow);
+                    }
+                    // Middle ring — 75% width, 16 points
+                    if (ow >= 1.5 * scaleX) {
+                        const mw = ow * 0.75;
+                        for (let i = 0; i < 16; i++) {
+                            const a = (2 * Math.PI * i) / 16;
+                            ctx.fillText(text, tx + Math.cos(a) * mw, ty + Math.sin(a) * mw);
+                        }
+                    }
+                    // Inner ring — 40% width, 8 points
+                    if (ow >= 2 * scaleX) {
+                        const iw = ow * 0.4;
+                        for (let i = 0; i < 8; i++) {
+                            const a = (2 * Math.PI * i) / 8;
+                            ctx.fillText(text, tx + Math.cos(a) * iw, ty + Math.sin(a) * iw);
+                        }
+                    }
+                    // Soft drop shadow for depth (like TikTok)
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 1 * scaleX;
+                    ctx.shadowBlur = 3 * scaleX;
+                    ctx.fillText(text, tx, ty);
+                    ctx.shadowColor = 'transparent';
+                    ctx.restore();
+                };
+
+                // Helper: draw shadow-mode text (triple shadow matching preview)
+                const drawShadowText = (text: string, tx: number, ty: number, color: string) => {
+                    ctx.save();
+                    ctx.fillStyle = color;
+                    // Shadow 1: close, strong
+                    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 1 * scaleX;
+                    ctx.shadowBlur = 3 * scaleX;
+                    ctx.fillText(text, tx, ty);
+                    // Shadow 2: medium distance
+                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                    ctx.shadowOffsetY = 2 * scaleX;
+                    ctx.shadowBlur = 8 * scaleX;
+                    ctx.fillText(text, tx, ty);
+                    // Shadow 3: far, soft
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                    ctx.shadowOffsetY = 4 * scaleX;
+                    ctx.shadowBlur = 16 * scaleX;
+                    ctx.fillText(text, tx, ty);
+                    ctx.restore();
+                };
+
+                // Helper: render a line with emoji-aware outline/shadow
+                const drawLineText = (text: string, lx: number, ly: number, ow: number, oc: string, tc: string, mode: string) => {
+                    emojiRx.lastIndex = 0;
+                    const hasEmoji = emojiRx.test(text);
+                    emojiRx.lastIndex = 0;
+
+                    if (!hasEmoji) {
+                        // No emoji — render full line with mode styling
+                        if (mode === 'outline' || mode === 'caption') {
+                            drawMultiRingOutline(text, lx, ly, ow, oc);
+                        }
+                        if (mode === 'shadow') {
+                            drawShadowText(text, lx, ly, tc);
+                            return; // shadow already draws the text
+                        }
+                        ctx.fillStyle = tc;
+                        ctx.fillText(text, lx, ly);
+                        return;
+                    }
+
+                    // Has emoji — render segment by segment
+                    const parts = text.split(emojiRx).filter(Boolean);
+                    const totalW = ctx.measureText(text).width;
+                    const savedAlign = ctx.textAlign;
+                    let startX: number;
+                    if (savedAlign === 'center') startX = lx - totalW / 2;
+                    else if (savedAlign === 'right') startX = lx - totalW;
+                    else startX = lx;
+
+                    ctx.textAlign = 'left';
+                    let cx = startX;
+
+                    for (const part of parts) {
+                        emojiRx.lastIndex = 0;
+                        const isEmoji = emojiRx.test(part);
+                        emojiRx.lastIndex = 0;
+                        const pw = ctx.measureText(part).width;
+
+                        if (!isEmoji) {
+                            if (mode === 'outline' || mode === 'caption') {
+                                drawMultiRingOutline(part, cx, ly, ow, oc);
+                            }
+                            if (mode === 'shadow') {
+                                drawShadowText(part, cx, ly, tc);
+                                cx += pw;
+                                continue;
+                            }
+                        }
+                        ctx.fillStyle = tc;
+                        ctx.fillText(part, cx, ly);
+                        cx += pw;
+                    }
+                    ctx.textAlign = savedAlign;
+                };
 
                 for (const layer of slide.layers) {
                     if (layer.type !== 'text' || layer.visible === false) continue;
@@ -551,10 +691,18 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     if (tl.rotation) ctx.rotate((tl.rotation * Math.PI) / 180);
                     ctx.globalAlpha = (tl.opacity ?? 100) / 100;
 
-                    const fontFamily = `${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
-                    ctx.font = fontFamily;
+                    // Font string with fontStyle (italic) + Apple Color Emoji priority
+                    const fStyle = tl.fontStyle && tl.fontStyle !== 'normal' ? `${tl.fontStyle} ` : '';
+                    const fontStr = `${fStyle}${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif`;
+                    ctx.font = fontStr;
                     ctx.textAlign = (tl.textAlign as CanvasTextAlign) || 'center';
                     ctx.textBaseline = 'top';
+
+                    // Letter-spacing support
+                    const letterSp = (tl.letterSpacing || 0) * scaleX;
+                    if (letterSp && 'letterSpacing' in ctx) {
+                        (ctx as any).letterSpacing = `${letterSp}px`;
+                    }
 
                     // Word-wrap
                     const lineH = fontSize * (tl.lineHeight || 1.5);
@@ -576,44 +724,73 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         if (current) lines.push(current);
                     }
 
-                    const totalH = lines.length * lineH;
+                    const textMode = tl.textMode || 'outline';
+                    const outlineW = Math.round((tl.outlineWidth || 2) * scaleX);
+
+                    // Caption mode: add gap between line boxes (matches preview gap: 4px)
+                    const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
+                    const totalH = lines.length * lineH + (lines.length > 1 ? (lines.length - 1) * captionGap : 0);
                     const startY = -totalH / 2;
 
-                    // Determine text mode styling
-                    const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
-                    const textMode = tl.textMode || 'outline';
-
                     for (let li = 0; li < lines.length; li++) {
-                        const ly = startY + li * lineH;
-                        const lx = 0; // textAlign handles horizontal positioning
+                        const ly = startY + li * (lineH + captionGap);
+                        const lx = 0;
 
+                        // Box / Caption mode: draw rounded background behind text
                         if (textMode === 'box' || textMode === 'caption') {
-                            // Draw background box behind text
                             const m = ctx.measureText(lines[li]);
-                            const boxPad = fontSize * 0.3;
-                            const boxW = m.width + boxPad * 2;
-                            const boxH = lineH;
+                            const boxPadX = textMode === 'caption' ? Math.round(14 * scaleX) : Math.round(12 * scaleX);
+                            const boxPadY = textMode === 'caption' ? Math.round(6 * scaleX) : Math.round(4 * scaleX);
+                            const boxW = m.width + boxPadX * 2;
+                            const boxH = lineH + boxPadY * 2;
                             const boxX = tl.textAlign === 'center' ? -boxW / 2 : tl.textAlign === 'right' ? -boxW : 0;
-                            ctx.fillStyle = tl.backgroundColor || 'rgba(0,0,0,0.7)';
-                            ctx.fillRect(boxX, ly - fontSize * 0.1, boxW, boxH);
+                            const boxY = ly - boxPadY;
+                            const radius = textMode === 'caption' ? Math.round(6 * scaleX) : Math.round(8 * scaleX);
+                            // Default colors matching preview exactly
+                            const defaultBg = textMode === 'caption' ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.95)';
+                            ctx.fillStyle = tl.backgroundColor || defaultBg;
+                            fillRoundRect(boxX, boxY, boxW, boxH, radius);
                         }
 
-                        if (textMode === 'outline' || textMode === 'caption') {
-                            ctx.strokeStyle = tl.outlineColor || '#000';
-                            ctx.lineWidth = outlineW;
-                            ctx.lineJoin = 'round';
-                            ctx.miterLimit = 2;
-                            ctx.strokeText(lines[li], lx, ly);
-                        }
+                        // Draw text with outline/shadow/emoji handling
+                        drawLineText(lines[li], lx, ly, outlineW, tl.outlineColor || '#000', tl.color || '#fff', textMode);
 
-                        ctx.fillStyle = tl.color || '#fff';
-                        ctx.fillText(lines[li], lx, ly);
+                        // Text-decoration (underline / strikethrough)
+                        if (tl.textDecoration && tl.textDecoration !== 'none') {
+                            const m = ctx.measureText(lines[li]);
+                            const dw = m.width;
+                            let dx: number;
+                            if (tl.textAlign === 'center') dx = -dw / 2;
+                            else if (tl.textAlign === 'right') dx = -dw;
+                            else dx = 0;
+
+                            ctx.save();
+                            ctx.strokeStyle = tl.color || '#fff';
+                            ctx.lineWidth = Math.max(1, fontSize * 0.06);
+                            ctx.beginPath();
+                            if (tl.textDecoration === 'underline') {
+                                const uy = ly + fontSize * 1.1;
+                                ctx.moveTo(dx, uy);
+                                ctx.lineTo(dx + dw, uy);
+                            } else if (tl.textDecoration === 'line-through') {
+                                const sy = ly + fontSize * 0.55;
+                                ctx.moveTo(dx, sy);
+                                ctx.lineTo(dx + dw, sy);
+                            }
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+
+                    // Reset letter-spacing
+                    if (letterSp && 'letterSpacing' in ctx) {
+                        (ctx as any).letterSpacing = '0px';
                     }
 
                     ctx.restore();
                 }
 
-                const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png', 1));
+                const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'));
                 if (blob) saveAs(blob, `slide-${i + 1}.png`);
                 if (i < slides.length - 1) await new Promise(r => setTimeout(r, 200));
             }
@@ -640,32 +817,32 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
 
                 {/* Undo/Redo — desktop */}
                 <div className="hidden sm:flex items-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30">
+                    <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-40" title="Annuler (Ctrl+Z)" aria-label="Annuler">
                         <Undo2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30">
+                    <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} className="text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-40" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">
                         <Redo2 className="h-4 w-4" />
                     </Button>
                 </div>
 
-                <h2 className="text-sm sm:text-base font-bold text-white truncate">Éditeur</h2>
+                <h2 className="text-sm sm:text-base font-bold text-white truncate">Éditeur<span className="hidden md:inline-flex text-[10px] text-white/30 ml-2" title="Ctrl+Z: Annuler | Ctrl+Y: Rétablir | Ctrl+D: Dupliquer | Suppr: Supprimer | Flèches: Déplacer">&#x2328;&#xFE0F; Raccourcis</span></h2>
 
                 <div className="flex gap-1 sm:gap-1.5 shrink-0">
                     {/* Undo/Redo — mobile */}
                     <div className="flex sm:hidden items-center">
-                        <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} className="text-white/60 hover:bg-white/10 disabled:opacity-30 h-9 w-9 p-0 touch-manipulation">
+                        <Button variant="ghost" size="sm" onClick={undo} disabled={!canUndo} className="text-white/60 hover:bg-white/10 disabled:opacity-40 h-9 w-9 p-0 touch-manipulation" title="Annuler (Ctrl+Z)" aria-label="Annuler">
                             <Undo2 className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} className="text-white/60 hover:bg-white/10 disabled:opacity-30 h-9 w-9 p-0 touch-manipulation">
+                        <Button variant="ghost" size="sm" onClick={redo} disabled={!canRedo} className="text-white/60 hover:bg-white/10 disabled:opacity-40 h-9 w-9 p-0 touch-manipulation" title="Rétablir (Ctrl+Y)" aria-label="Rétablir">
                             <Redo2 className="h-4 w-4" />
                         </Button>
                     </div>
 
-                    <Button variant="outline" size="sm" onClick={exportSlides} disabled={isExporting} className="border-white/20 text-white hover:bg-white/10">
+                    <Button variant="outline" size="sm" onClick={exportSlides} disabled={isExporting} className="border-white/20 text-white hover:bg-white/10" title="Exporter les slides">
                         {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                         <span className="hidden sm:inline ml-1.5">Exporter</span>
                     </Button>
-                    <Button size="sm" onClick={() => onSave(slides, canvasW, canvasH)} className="bg-primary hover:bg-primary/90">
+                    <Button size="sm" onClick={() => onSave(slides, canvasW, canvasH)} className="bg-primary hover:bg-primary/90" title="Sauvegarder">
                         <Save className="h-4 w-4" />
                         <span className="hidden sm:inline ml-1.5">Sauvegarder</span>
                     </Button>
@@ -707,6 +884,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                                     <button
                                         onClick={(e) => { e.stopPropagation(); deleteSlide(idx); }}
                                         className="w-5 h-5 sm:w-6 sm:h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                                        title="Supprimer cette slide"
+                                        aria-label="Supprimer la slide"
                                     >
                                         <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
                                     </button>
@@ -719,6 +898,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         onClick={addSlide}
                         className="shrink-0 w-12 sm:w-14 md:w-auto rounded border-2 border-dashed border-white/20 flex items-center justify-center text-white/40 hover:border-primary/50 hover:text-primary transition-colors touch-manipulation"
                         style={{ aspectRatio: `${canvasW}/${canvasH}` }}
+                        title="Ajouter une slide"
+                        aria-label="Ajouter une slide"
                     >
                         <Plus className="h-4 w-4" />
                     </button>
@@ -912,6 +1093,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     onClick={() => { setActiveSlideIndex(Math.max(0, activeSlideIndex - 1)); setSelectedLayerId(null); }}
                     disabled={activeSlideIndex === 0}
                     className="border-white/10 text-white hover:bg-white/10 h-9 touch-manipulation"
+                    aria-label="Slide précédente"
                 >
                     <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Button>
@@ -923,6 +1105,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     onClick={() => { setActiveSlideIndex(Math.min(slides.length - 1, activeSlideIndex + 1)); setSelectedLayerId(null); }}
                     disabled={activeSlideIndex === slides.length - 1}
                     className="border-white/10 text-white hover:bg-white/10 h-9 touch-manipulation"
+                    aria-label="Slide suivante"
                 >
                     <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </Button>

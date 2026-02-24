@@ -27,10 +27,20 @@ export function DashboardTabs({
     userNav,
     activeProfile,
 }: DashboardTabsProps) {
-    const [activeTab, setActiveTab] = useState<TabId>('analytics');
+    // Restore active tab from URL param or sessionStorage, default to 'analytics'
+    const validTabs: TabId[] = ['overview', 'analytics', 'competitors', 'comparison', 'collections', 'creation', 'apikey'];
+    const getInitialTab = (): TabId => {
+        if (typeof window === 'undefined') return 'analytics';
+        const urlTab = new URLSearchParams(window.location.search).get('tab');
+        if (urlTab && validTabs.includes(urlTab as TabId)) return urlTab as TabId;
+        const stored = sessionStorage.getItem('dashboard-active-tab');
+        if (stored && validTabs.includes(stored as TabId)) return stored as TabId;
+        return 'analytics';
+    };
+    const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
     const [animatingTab, setAnimatingTab] = useState<TabId | null>(null);
     // Track which tabs have been visited (lazy mount: only render once visited)
-    const visitedTabs = useRef(new Set<TabId>(['analytics']));
+    const visitedTabs = useRef(new Set<TabId>([getInitialTab()]));
     // Scroll indicator
     const tabsScrollRef = useRef<HTMLDivElement>(null);
     const [canScrollRight, setCanScrollRight] = useState(false);
@@ -61,20 +71,11 @@ export function DashboardTabs({
         visitedTabs.current.add(tab);
         setAnimatingTab(tab);
         setActiveTab(tab);
+        // Persist active tab to sessionStorage for page refresh recovery
+        try { sessionStorage.setItem('dashboard-active-tab', tab); } catch {}
         // Clear animation class after transition
         setTimeout(() => setAnimatingTab(null), 300);
     };
-
-    // Check URL params for tab selection
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tabParam = urlParams.get('tab');
-            if (tabParam && ['overview', 'analytics', 'competitors', 'comparison', 'collections', 'creation', 'apikey'].includes(tabParam)) {
-                handleTabChange(tabParam as TabId);
-            }
-        }
-    }, []);
 
     // Listen for remix-hook-selected event to switch to creation tab
     useEffect(() => {

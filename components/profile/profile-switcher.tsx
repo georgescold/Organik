@@ -178,11 +178,14 @@ export function ProfileSwitcher({ profiles, activeProfileId }: ProfileSwitcherPr
                                 value={newProfileName}
                                 onChange={(e) => setNewProfileName(e.target.value)}
                             />
+                            {newProfileName.length > 0 && newProfileName.trim().length < 2 && (
+                                <p className="text-xs text-destructive mt-1">Le nom doit faire au moins 2 caractères</p>
+                            )}
                         </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-                        <Button onClick={handleCreate} disabled={isCreating || !newProfileName.trim()}>
+                        <Button onClick={handleCreate} disabled={isCreating || newProfileName.trim().length < 2}>
                             {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             Créer
                         </Button>

@@ -98,7 +98,9 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [collections, setCollections] = useState<any[]>([]); // [NEW]
     const [selectedCollectionId, setSelectedCollectionId] = useState<string>(''); // [NEW] Forced choice
 
-    const [isPending, startTransition] = useTransition();
+    const [isGeneratingHooks, startHookTransition] = useTransition();
+    const [isGeneratingCarousel, startCarouselTransition] = useTransition();
+    const [isSaving, startSaveTransition] = useTransition();
     const [replacingIndex, setReplacingIndex] = useState<number | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -117,6 +119,90 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [showConfirmSave, setShowConfirmSave] = useState(false);
     const inlineConfigRef = useRef<HTMLDivElement>(null);
     // slidesPreviewRef removed — Twemoji now renders as React JSX, no DOM mutation needed
+
+    // ─── Session persistence: auto-save state to sessionStorage on change ───
+    // Prevents data loss on page refresh during creation flow
+    const SESSION_KEY = 'creation-session-state';
+    const isRestoringRef = useRef(false);
+
+    // Restore session state on mount (only if no initialPost — that takes priority)
+    useEffect(() => {
+        if (initialPost) return; // DB data takes priority
+        try {
+            const saved = sessionStorage.getItem(SESSION_KEY);
+            if (!saved) return;
+            const state = JSON.parse(saved);
+            if (!state || !state.step) return;
+
+            isRestoringRef.current = true;
+            if (state.step) setStep(state.step);
+            if (state.hooks?.length) setHooks(state.hooks);
+            if (state.selectedHook) setSelectedHook(state.selectedHook);
+            if (state.slides?.length) setSlides(state.slides);
+            if (state.description) setDescription(state.description);
+            if (state.selectedCollectionId) setSelectedCollectionId(state.selectedCollectionId);
+            if (state.editingId) setEditingId(state.editingId);
+            if (state.savedEditorData) {
+                setSavedEditorData(state.savedEditorData);
+                // Regenerate preview images from restored editor data
+                if (state.slides?.length) {
+                    setTimeout(() => {
+                        generatePreviewImages(state.savedEditorData, state.slides);
+                    }, 100);
+                }
+            }
+            if (state.predictiveScore) setPredictiveScore(state.predictiveScore);
+
+            toast.info("Session précédente restaurée", { duration: 3000 });
+
+            // Allow saves after a tick
+            setTimeout(() => { isRestoringRef.current = false; }, 500);
+        } catch (e) {
+            console.error('Failed to restore creation session:', e);
+            sessionStorage.removeItem(SESSION_KEY);
+            isRestoringRef.current = false;
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Auto-save critical state to sessionStorage (debounced)
+    useEffect(() => {
+        if (isRestoringRef.current) return; // Don't save while restoring
+        // Only save if there's meaningful work to preserve
+        const hasWork = slides.length > 0 || hooks.length > 0 || selectedHook;
+        if (!hasWork) {
+            sessionStorage.removeItem(SESSION_KEY);
+            return;
+        }
+
+        const timeout = setTimeout(() => {
+            try {
+                const state = {
+                    step,
+                    hooks,
+                    selectedHook,
+                    slides,
+                    description,
+                    selectedCollectionId,
+                    editingId,
+                    savedEditorData,
+                    predictiveScore,
+                    _ts: Date.now(),
+                };
+                sessionStorage.setItem(SESSION_KEY, JSON.stringify(state));
+            } catch (e) {
+                // sessionStorage full or unavailable — ignore silently
+            }
+        }, 500); // 500ms debounce
+
+        return () => clearTimeout(timeout);
+    }, [step, hooks, selectedHook, slides, description, selectedCollectionId, editingId, savedEditorData, predictiveScore]);
+
+    // Helper: clear session state (call after successful save or full reset)
+    const clearSessionState = useCallback(() => {
+        sessionStorage.removeItem(SESSION_KEY);
+    }, []);
+    // ─── End session persistence ───
 
     // Convert current slides to EditorSlide format for the Canva editor
     // Splits text on double newlines into separate layers for TikTok-like layout
@@ -175,7 +261,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     textAlign: 'center' as const,
                     color: '#ffffff',
                     outlineColor: '#000000',
-                    outlineWidth: 1.5,
+                    outlineWidth: 2,
                     lineHeight: 1.5,
                     maxWidth: 330, // matches preview's px-3 padding (~360 - 30)
                     textMode: 'outline' as const,
@@ -305,12 +391,122 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     ctx.restore();
                 }
 
-                // Text layers
+                // Text layers — full rendering matching carousel-editor export exactly
                 if (edSlide) {
                     const scaleX = W / ecW;
+                    const scaleY = H / ecH;
+
+                    // Emoji regex — skip outline/shadow on emoji characters
+                    const emojiRx = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/gu;
+
+                    // Helper: rounded rectangle
+                    const fillRoundRect = (rx: number, ry: number, rw: number, rh: number, radius: number) => {
+                        const r = Math.min(radius, rw / 2, rh / 2);
+                        ctx.beginPath();
+                        ctx.moveTo(rx + r, ry);
+                        ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+                        ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
+                        ctx.arcTo(rx, ry + rh, rx, ry, r);
+                        ctx.arcTo(rx, ry, rx + rw, ry, r);
+                        ctx.closePath();
+                        ctx.fill();
+                    };
+
+                    // Helper: TikTok-style multi-ring outline
+                    const drawMultiRingOutline = (text: string, tx: number, ty: number, ow: number, oc: string) => {
+                        ctx.save();
+                        ctx.fillStyle = oc;
+                        for (let i = 0; i < 24; i++) {
+                            const a = (2 * Math.PI * i) / 24;
+                            ctx.fillText(text, tx + Math.cos(a) * ow, ty + Math.sin(a) * ow);
+                        }
+                        if (ow >= 1.5 * scaleX) {
+                            const mw = ow * 0.75;
+                            for (let i = 0; i < 16; i++) {
+                                const a = (2 * Math.PI * i) / 16;
+                                ctx.fillText(text, tx + Math.cos(a) * mw, ty + Math.sin(a) * mw);
+                            }
+                        }
+                        if (ow >= 2 * scaleX) {
+                            const iw = ow * 0.4;
+                            for (let i = 0; i < 8; i++) {
+                                const a = (2 * Math.PI * i) / 8;
+                                ctx.fillText(text, tx + Math.cos(a) * iw, ty + Math.sin(a) * iw);
+                            }
+                        }
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 1 * scaleX;
+                        ctx.shadowBlur = 3 * scaleX;
+                        ctx.fillText(text, tx, ty);
+                        ctx.shadowColor = 'transparent';
+                        ctx.restore();
+                    };
+
+                    // Helper: triple shadow text
+                    const drawShadowText = (text: string, tx: number, ty: number, color: string) => {
+                        ctx.save();
+                        ctx.fillStyle = color;
+                        ctx.shadowColor = 'rgba(0,0,0,0.9)';
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 1 * scaleX;
+                        ctx.shadowBlur = 3 * scaleX;
+                        ctx.fillText(text, tx, ty);
+                        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+                        ctx.shadowOffsetY = 2 * scaleX;
+                        ctx.shadowBlur = 8 * scaleX;
+                        ctx.fillText(text, tx, ty);
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowOffsetY = 4 * scaleX;
+                        ctx.shadowBlur = 16 * scaleX;
+                        ctx.fillText(text, tx, ty);
+                        ctx.restore();
+                    };
+
+                    // Helper: emoji-aware line renderer
+                    const drawLineText = (text: string, lx: number, ly: number, ow: number, oc: string, tc: string, mode: string) => {
+                        emojiRx.lastIndex = 0;
+                        const hasEmoji = emojiRx.test(text);
+                        emojiRx.lastIndex = 0;
+
+                        if (!hasEmoji) {
+                            if (mode === 'outline' || mode === 'caption') drawMultiRingOutline(text, lx, ly, ow, oc);
+                            if (mode === 'shadow') { drawShadowText(text, lx, ly, tc); return; }
+                            ctx.fillStyle = tc;
+                            ctx.fillText(text, lx, ly);
+                            return;
+                        }
+
+                        const parts = text.split(emojiRx).filter(Boolean);
+                        const totalW = ctx.measureText(text).width;
+                        const savedAlign = ctx.textAlign;
+                        let startX: number;
+                        if (savedAlign === 'center') startX = lx - totalW / 2;
+                        else if (savedAlign === 'right') startX = lx - totalW;
+                        else startX = lx;
+
+                        ctx.textAlign = 'left';
+                        let cx = startX;
+                        for (const part of parts) {
+                            emojiRx.lastIndex = 0;
+                            const isEmoji = emojiRx.test(part);
+                            emojiRx.lastIndex = 0;
+                            const pw = ctx.measureText(part).width;
+                            if (!isEmoji) {
+                                if (mode === 'outline' || mode === 'caption') drawMultiRingOutline(part, cx, ly, ow, oc);
+                                if (mode === 'shadow') { drawShadowText(part, cx, ly, tc); cx += pw; continue; }
+                            }
+                            ctx.fillStyle = tc;
+                            ctx.fillText(part, cx, ly);
+                            cx += pw;
+                        }
+                        ctx.textAlign = savedAlign;
+                    };
+
                     for (const layer of edSlide.layers) {
                         if (layer.type !== 'text') continue;
                         const tl = layer as TextLayer;
+
                         const fontSize = Math.round(tl.fontSize * scaleX);
                         const posX = (tl.x / 100) * W;
                         const posY = (tl.y / 100) * H;
@@ -320,9 +516,14 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         ctx.translate(posX, posY);
                         if (tl.rotation) ctx.rotate((tl.rotation * Math.PI) / 180);
                         ctx.globalAlpha = (tl.opacity ?? 100) / 100;
-                        ctx.font = `${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
+
+                        const fStyle = tl.fontStyle && tl.fontStyle !== 'normal' ? `${tl.fontStyle} ` : '';
+                        ctx.font = `${fStyle}${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif`;
                         ctx.textAlign = (tl.textAlign as CanvasTextAlign) || 'center';
                         ctx.textBaseline = 'top';
+
+                        const letterSp = (tl.letterSpacing || 0) * scaleX;
+                        if (letterSp && 'letterSpacing' in ctx) (ctx as any).letterSpacing = `${letterSp}px`;
 
                         const lineH = fontSize * (tl.lineHeight || 1.5);
                         const lines: string[] = [];
@@ -337,43 +538,57 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             }
                             if (cur) lines.push(cur);
                         }
-                        const totalH = lines.length * lineH;
-                        const startY = -totalH / 2;
-                        const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
+
                         const textMode = tl.textMode || 'outline';
+                        const outlineW = Math.round((tl.outlineWidth || 2) * scaleX);
+                        const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
+                        const totalH = lines.length * lineH + (lines.length > 1 ? (lines.length - 1) * captionGap : 0);
+                        const startY = -totalH / 2;
 
                         for (let li = 0; li < lines.length; li++) {
-                            const ly = startY + li * lineH;
+                            const ly = startY + li * (lineH + captionGap);
+                            const lx = 0;
+
                             if (textMode === 'box' || textMode === 'caption') {
                                 const m = ctx.measureText(lines[li]);
-                                const pad = fontSize * 0.3;
-                                const bW = m.width + pad * 2;
-                                const bX = tl.textAlign === 'center' ? -bW / 2 : tl.textAlign === 'right' ? -bW : 0;
-                                ctx.fillStyle = tl.backgroundColor || 'rgba(0,0,0,0.7)';
-                                ctx.fillRect(bX, ly - fontSize * 0.1, bW, lineH);
+                                const boxPadX = textMode === 'caption' ? Math.round(14 * scaleX) : Math.round(12 * scaleX);
+                                const boxPadY = textMode === 'caption' ? Math.round(6 * scaleX) : Math.round(4 * scaleX);
+                                const boxW = m.width + boxPadX * 2;
+                                const boxH = lineH + boxPadY * 2;
+                                const boxX = tl.textAlign === 'center' ? -boxW / 2 : tl.textAlign === 'right' ? -boxW : 0;
+                                const boxY = ly - boxPadY;
+                                const radius = textMode === 'caption' ? Math.round(6 * scaleX) : Math.round(8 * scaleX);
+                                const defaultBg = textMode === 'caption' ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.95)';
+                                ctx.fillStyle = tl.backgroundColor || defaultBg;
+                                fillRoundRect(boxX, boxY, boxW, boxH, radius);
                             }
-                            if (textMode === 'outline' || textMode === 'caption') {
-                                ctx.strokeStyle = tl.outlineColor || '#000';
-                                ctx.lineWidth = outlineW;
-                                ctx.lineJoin = 'round';
-                                ctx.miterLimit = 2;
-                                ctx.strokeText(lines[li], 0, ly);
-                            }
-                            if (textMode === 'shadow') {
-                                ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                                ctx.shadowBlur = outlineW * 2;
-                                ctx.shadowOffsetX = outlineW;
-                                ctx.shadowOffsetY = outlineW;
-                            }
-                            ctx.fillStyle = tl.color || '#fff';
-                            ctx.fillText(lines[li], 0, ly);
-                            if (textMode === 'shadow') {
-                                ctx.shadowColor = 'transparent';
-                                ctx.shadowBlur = 0;
-                                ctx.shadowOffsetX = 0;
-                                ctx.shadowOffsetY = 0;
+
+                            drawLineText(lines[li], lx, ly, outlineW, tl.outlineColor || '#000', tl.color || '#fff', textMode);
+
+                            if (tl.textDecoration && tl.textDecoration !== 'none') {
+                                const m = ctx.measureText(lines[li]);
+                                const dw = m.width;
+                                let dx: number;
+                                if (tl.textAlign === 'center') dx = -dw / 2;
+                                else if (tl.textAlign === 'right') dx = -dw;
+                                else dx = 0;
+                                ctx.save();
+                                ctx.strokeStyle = tl.color || '#fff';
+                                ctx.lineWidth = Math.max(1, fontSize * 0.06);
+                                ctx.beginPath();
+                                if (tl.textDecoration === 'underline') {
+                                    ctx.moveTo(dx, ly + fontSize * 1.1);
+                                    ctx.lineTo(dx + dw, ly + fontSize * 1.1);
+                                } else if (tl.textDecoration === 'line-through') {
+                                    ctx.moveTo(dx, ly + fontSize * 0.55);
+                                    ctx.lineTo(dx + dw, ly + fontSize * 0.55);
+                                }
+                                ctx.stroke();
+                                ctx.restore();
                             }
                         }
+
+                        if (letterSp && 'letterSpacing' in ctx) (ctx as any).letterSpacing = '0px';
                         ctx.restore();
                     }
                 }
@@ -572,7 +787,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     };
 
     const handleGenerateHooks = () => {
-        startTransition(async () => {
+        startHookTransition(async () => {
             const result = await generateHooks();
             if (result.error) toast.error(result.error);
             else if (result.hooks) {
@@ -585,7 +800,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
     const handleRejectHook = (index: number, hook: HookProposal) => {
         setReplacingIndex(index);
-        startTransition(async () => {
+        startHookTransition(async () => {
             await rejectHook(hook);
             const res = await generateReplacementHook(hook);
             if (res.hook) {
@@ -607,7 +822,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
     const handleGenerateVariations = (index: number, hook: HookProposal) => {
         setReplacingIndex(index); // Use replacing index to show loading state on the card
-        startTransition(async () => {
+        startHookTransition(async () => {
             const result = await generateVariations(hook);
             if (result.error) toast.error(result.error);
             else if (result.hooks) {
@@ -651,7 +866,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
             toast.error("Veuillez sélectionner une collection d'images pour continuer");
             return;
         }
-        startTransition(async () => {
+        startCarouselTransition(async () => {
             // Phase 1: Generate carousel (slides + images)
             setGenerationPhase('generating');
             const result = await generateCarousel(selectedHook.hook, selectedCollectionId);
@@ -792,10 +1007,70 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         ctx.restore();
                     }
 
-                    // ── Rich export from EditorSlide data ──
+                    // ── Rich export from EditorSlide data (full rendering matching editor) ──
                     if (editorSlide) {
                         const scaleX = W / edCanvasW;
                         const scaleY = H / edCanvasH;
+
+                        const emojiRx = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}\p{Emoji_Modifier}?)/gu;
+
+                        const fillRoundRect = (rx: number, ry: number, rw: number, rh: number, radius: number) => {
+                            const r = Math.min(radius, rw / 2, rh / 2);
+                            ctx.beginPath();
+                            ctx.moveTo(rx + r, ry);
+                            ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
+                            ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, r);
+                            ctx.arcTo(rx, ry + rh, rx, ry, r);
+                            ctx.arcTo(rx, ry, rx + rw, ry, r);
+                            ctx.closePath();
+                            ctx.fill();
+                        };
+
+                        const drawMultiRingOutline = (text: string, tx: number, ty: number, ow: number, oc: string) => {
+                            ctx.save();
+                            ctx.fillStyle = oc;
+                            for (let i = 0; i < 24; i++) { const a = (2 * Math.PI * i) / 24; ctx.fillText(text, tx + Math.cos(a) * ow, ty + Math.sin(a) * ow); }
+                            if (ow >= 1.5 * scaleX) { const mw = ow * 0.75; for (let i = 0; i < 16; i++) { const a = (2 * Math.PI * i) / 16; ctx.fillText(text, tx + Math.cos(a) * mw, ty + Math.sin(a) * mw); } }
+                            if (ow >= 2 * scaleX) { const iw = ow * 0.4; for (let i = 0; i < 8; i++) { const a = (2 * Math.PI * i) / 8; ctx.fillText(text, tx + Math.cos(a) * iw, ty + Math.sin(a) * iw); } }
+                            ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1 * scaleX; ctx.shadowBlur = 3 * scaleX;
+                            ctx.fillText(text, tx, ty); ctx.shadowColor = 'transparent';
+                            ctx.restore();
+                        };
+
+                        const drawShadowText = (text: string, tx: number, ty: number, color: string) => {
+                            ctx.save(); ctx.fillStyle = color;
+                            ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 1 * scaleX; ctx.shadowBlur = 3 * scaleX; ctx.fillText(text, tx, ty);
+                            ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowOffsetY = 2 * scaleX; ctx.shadowBlur = 8 * scaleX; ctx.fillText(text, tx, ty);
+                            ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowOffsetY = 4 * scaleX; ctx.shadowBlur = 16 * scaleX; ctx.fillText(text, tx, ty);
+                            ctx.restore();
+                        };
+
+                        const drawLineText = (text: string, lx: number, ly: number, ow: number, oc: string, tc: string, mode: string) => {
+                            emojiRx.lastIndex = 0; const hasEmoji = emojiRx.test(text); emojiRx.lastIndex = 0;
+                            if (!hasEmoji) {
+                                if (mode === 'outline' || mode === 'caption') drawMultiRingOutline(text, lx, ly, ow, oc);
+                                if (mode === 'shadow') { drawShadowText(text, lx, ly, tc); return; }
+                                ctx.fillStyle = tc; ctx.fillText(text, lx, ly); return;
+                            }
+                            const parts = text.split(emojiRx).filter(Boolean);
+                            const totalW = ctx.measureText(text).width;
+                            const savedAlign = ctx.textAlign;
+                            let startX: number;
+                            if (savedAlign === 'center') startX = lx - totalW / 2;
+                            else if (savedAlign === 'right') startX = lx - totalW;
+                            else startX = lx;
+                            ctx.textAlign = 'left'; let cx = startX;
+                            for (const part of parts) {
+                                emojiRx.lastIndex = 0; const isEmoji = emojiRx.test(part); emojiRx.lastIndex = 0;
+                                const pw = ctx.measureText(part).width;
+                                if (!isEmoji) {
+                                    if (mode === 'outline' || mode === 'caption') drawMultiRingOutline(part, cx, ly, ow, oc);
+                                    if (mode === 'shadow') { drawShadowText(part, cx, ly, tc); cx += pw; continue; }
+                                }
+                                ctx.fillStyle = tc; ctx.fillText(part, cx, ly); cx += pw;
+                            }
+                            ctx.textAlign = savedAlign;
+                        };
 
                         for (const layer of editorSlide.layers) {
                             if (layer.type !== 'text') continue;
@@ -811,74 +1086,76 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             if (tl.rotation) ctx.rotate((tl.rotation * Math.PI) / 180);
                             ctx.globalAlpha = (tl.opacity ?? 100) / 100;
 
-                            ctx.font = `${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif`;
+                            const fStyle = tl.fontStyle && tl.fontStyle !== 'normal' ? `${tl.fontStyle} ` : '';
+                            ctx.font = `${fStyle}${tl.fontWeight || '700'} ${fontSize}px ${tl.fontFamily || 'Montserrat'}, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif`;
                             ctx.textAlign = (tl.textAlign as CanvasTextAlign) || 'center';
                             ctx.textBaseline = 'top';
 
-                            // Word-wrap
+                            const letterSp = (tl.letterSpacing || 0) * scaleX;
+                            if (letterSp && 'letterSpacing' in ctx) (ctx as any).letterSpacing = `${letterSp}px`;
+
                             const lineH = fontSize * (tl.lineHeight || 1.5);
                             const lines: string[] = [];
-                            const rawLines = tl.content.split('\n');
-                            for (const rawLine of rawLines) {
+                            for (const rawLine of tl.content.split('\n')) {
                                 if (!rawLine.trim()) { lines.push(''); continue; }
                                 const words = rawLine.split(' ');
-                                let current = '';
-                                for (const word of words) {
-                                    const test = current ? `${current} ${word}` : word;
-                                    if (ctx.measureText(test).width > maxW && current) {
-                                        lines.push(current);
-                                        current = word;
-                                    } else {
-                                        current = test;
-                                    }
+                                let cur = '';
+                                for (const w of words) {
+                                    const test = cur ? `${cur} ${w}` : w;
+                                    if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+                                    else cur = test;
                                 }
-                                if (current) lines.push(current);
+                                if (cur) lines.push(cur);
                             }
 
-                            const totalH = lines.length * lineH;
-                            const startY = -totalH / 2;
-                            const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
                             const textMode = tl.textMode || 'outline';
+                            const outlineW = Math.round((tl.outlineWidth || 2) * scaleX);
+                            const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
+                            const totalH = lines.length * lineH + (lines.length > 1 ? (lines.length - 1) * captionGap : 0);
+                            const startY = -totalH / 2;
 
                             for (let li = 0; li < lines.length; li++) {
-                                const ly = startY + li * lineH;
+                                const ly = startY + li * (lineH + captionGap);
                                 const lx = 0;
 
                                 if (textMode === 'box' || textMode === 'caption') {
                                     const m = ctx.measureText(lines[li]);
-                                    const boxPad = fontSize * 0.3;
-                                    const boxW = m.width + boxPad * 2;
-                                    const boxH = lineH;
+                                    const boxPadX = textMode === 'caption' ? Math.round(14 * scaleX) : Math.round(12 * scaleX);
+                                    const boxPadY = textMode === 'caption' ? Math.round(6 * scaleX) : Math.round(4 * scaleX);
+                                    const boxW = m.width + boxPadX * 2;
+                                    const boxH = lineH + boxPadY * 2;
                                     const boxX = tl.textAlign === 'center' ? -boxW / 2 : tl.textAlign === 'right' ? -boxW : 0;
-                                    ctx.fillStyle = tl.backgroundColor || 'rgba(0,0,0,0.7)';
-                                    ctx.fillRect(boxX, ly - fontSize * 0.1, boxW, boxH);
+                                    const boxY = ly - boxPadY;
+                                    const radius = textMode === 'caption' ? Math.round(6 * scaleX) : Math.round(8 * scaleX);
+                                    const defaultBg = textMode === 'caption' ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.95)';
+                                    ctx.fillStyle = tl.backgroundColor || defaultBg;
+                                    fillRoundRect(boxX, boxY, boxW, boxH, radius);
                                 }
 
-                                if (textMode === 'outline' || textMode === 'caption') {
-                                    ctx.strokeStyle = tl.outlineColor || '#000';
-                                    ctx.lineWidth = outlineW;
-                                    ctx.lineJoin = 'round';
-                                    ctx.miterLimit = 2;
-                                    ctx.strokeText(lines[li], lx, ly);
-                                }
+                                drawLineText(lines[li], lx, ly, outlineW, tl.outlineColor || '#000', tl.color || '#fff', textMode);
 
-                                if (textMode === 'shadow') {
-                                    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-                                    ctx.shadowBlur = outlineW * 2;
-                                    ctx.shadowOffsetX = outlineW;
-                                    ctx.shadowOffsetY = outlineW;
-                                }
-
-                                ctx.fillStyle = tl.color || '#fff';
-                                ctx.fillText(lines[li], lx, ly);
-
-                                if (textMode === 'shadow') {
-                                    ctx.shadowColor = 'transparent';
-                                    ctx.shadowBlur = 0;
-                                    ctx.shadowOffsetX = 0;
-                                    ctx.shadowOffsetY = 0;
+                                if (tl.textDecoration && tl.textDecoration !== 'none') {
+                                    const m = ctx.measureText(lines[li]);
+                                    const dw = m.width;
+                                    let dx: number;
+                                    if (tl.textAlign === 'center') dx = -dw / 2;
+                                    else if (tl.textAlign === 'right') dx = -dw;
+                                    else dx = 0;
+                                    ctx.save();
+                                    ctx.strokeStyle = tl.color || '#fff';
+                                    ctx.lineWidth = Math.max(1, fontSize * 0.06);
+                                    ctx.beginPath();
+                                    if (tl.textDecoration === 'underline') {
+                                        ctx.moveTo(dx, ly + fontSize * 1.1); ctx.lineTo(dx + dw, ly + fontSize * 1.1);
+                                    } else if (tl.textDecoration === 'line-through') {
+                                        ctx.moveTo(dx, ly + fontSize * 0.55); ctx.lineTo(dx + dw, ly + fontSize * 0.55);
+                                    }
+                                    ctx.stroke();
+                                    ctx.restore();
                                 }
                             }
+
+                            if (letterSp && 'letterSpacing' in ctx) (ctx as any).letterSpacing = '0px';
                             ctx.restore();
                         }
                     } else {
@@ -979,7 +1256,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     };
 
     const handleSave = (asDraft = false) => {
-        startTransition(async () => {
+        startSaveTransition(async () => {
             if (!selectedHook) return;
 
             const editorDataJson = savedEditorData ? JSON.stringify(savedEditorData) : undefined;
@@ -996,6 +1273,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     // Stay on preview with draft context preserved
                     loadDrafts();
                 } else {
+                    clearSessionState();
                     setStep('hooks');
                     setHooks([]);
                     setSlides([]);
@@ -1019,10 +1297,11 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 }
                 toast.success(asDraft ? "Brouillon sauvegardé !" : "Carrousel sauvegardé !");
                 if (asDraft) {
-                    // Stay on preview — set editingId so future saves update instead of creating duplicates
+                    // Stay on preview — set editingId so future saves update instead of duplicates
                     if (res.postId) setEditingId(res.postId);
                     loadDrafts();
                 } else {
+                    clearSessionState();
                     setStep('hooks');
                     setHooks([]);
                     setSlides([]);
@@ -1036,7 +1315,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     };
 
     const handleSaveIdea = (hook: HookProposal) => {
-        startTransition(async () => {
+        startHookTransition(async () => {
             const res = await saveHookAsIdea(hook);
             if (res.error) toast.error(res.error);
             else {
@@ -1047,7 +1326,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     };
 
     const reloadDraftFromDatabase = async (draftId: string) => {
-        startTransition(async () => {
+        startHookTransition(async () => {
             const result = await getPost(draftId);
 
             if (result.error || !result.post) {
@@ -1217,10 +1496,10 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                     <Button
                                         size="lg"
                                         onClick={handleGenerateHooks}
-                                        disabled={isPending}
+                                        disabled={isGeneratingHooks}
                                         className="gap-3 text-base md:text-lg h-14 md:h-16 px-8 md:px-10 rounded-2xl bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-xl shadow-primary/30 hover:shadow-primary/40 transition-all duration-300 hover:scale-105 w-full md:w-auto"
                                     >
-                                        {isPending ? (
+                                        {isGeneratingHooks ? (
                                             <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
                                         ) : (
                                             <Sparkles className="w-5 h-5 md:w-6 md:h-6" />
@@ -1263,10 +1542,10 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={handleGenerateHooks}
-                                    disabled={isPending}
+                                    disabled={isGeneratingHooks}
                                     className="text-muted-foreground hover:text-primary gap-2"
                                 >
-                                    {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+                                    {isGeneratingHooks ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
                                     Régénérer tout
                                 </Button>
                             </div>
@@ -1309,7 +1588,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                                     handleGenerateVariations(i, h);
                                                 }}
                                                 title="Générer des variations à partir de ce concept"
-                                                disabled={isPending || replacingIndex === i}
+                                                disabled={isGeneratingHooks || replacingIndex === i}
                                             >
                                                 {replacingIndex === i ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                                             </Button>
@@ -1388,8 +1667,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                     ))}
                                 </select>
                             </div>
-                            <Button className="w-full" onClick={handleGenerateCarousel} disabled={isPending}>
-                                {isPending ? (
+                            <Button className="w-full" onClick={handleGenerateCarousel} disabled={isGeneratingCarousel}>
+                                {isGeneratingCarousel ? (
                                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     {generationPhase === 'scoring' ? 'Analyse predictive...' :
                                      generationPhase === 'improving' ? 'Optimisation...' :
@@ -1544,19 +1823,19 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 setEditingId(null);
                             }
                         }}
-                        disabled={isPending}
+                        disabled={isSaving}
                         className="flex-1 md:flex-none text-muted-foreground hover:text-foreground"
                     >
                         Annuler
                     </Button>
                     {!initialPost && (
-                        <Button variant="outline" onClick={() => handleSave(true)} disabled={isPending} className="flex-1 md:flex-none">
+                        <Button variant="outline" onClick={() => handleSave(true)} disabled={isSaving} className="flex-1 md:flex-none">
                             <FileText className="mr-2 h-4 w-4" />
                             <span className="truncate">Sauvegarder Brouillon</span>
                         </Button>
                     )}
-                    <Button onClick={() => initialPost ? handleSave(false) : setShowConfirmSave(true)} disabled={isPending} className="bg-secondary text-white hover:bg-secondary/90 flex-1 md:flex-none">
-                        {isPending ? <Loader2 className="animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                    <Button onClick={() => initialPost ? handleSave(false) : setShowConfirmSave(true)} disabled={isSaving} className="bg-secondary text-white hover:bg-secondary/90 flex-1 md:flex-none">
+                        {isSaving ? <Loader2 className="animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                         {initialPost ? 'Enregistrer' : 'Valider'}
                     </Button>
                 </div>
@@ -1721,7 +2000,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                             const selected = predictiveScore.improvements.filter((_: string, i: number) => selectedImprovements.has(i));
                                             if (!selected.length) { toast.error("Selectionnez au moins une amelioration"); return; }
                                             setIsImproving(true);
-                                            startTransition(async () => {
+                                            startHookTransition(async () => {
                                                 try {
                                                     // Save current slides for undo
                                                     setSlidesBeforeImprove([...slides]);
@@ -1746,7 +2025,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                                 setIsImproving(false);
                                             });
                                         }}
-                                        disabled={isImproving || isPending || selectedImprovements.size === 0}
+                                        disabled={isImproving || selectedImprovements.size === 0}
                                         size="sm"
                                         className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium disabled:opacity-20"
                                     >
@@ -1783,7 +2062,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         setIsScoring(true);
                         setPredictiveScore(null);
                         setSelectedImprovements(new Set());
-                        startTransition(async () => {
+                        startHookTransition(async () => {
                             const res = await scoreCarouselBeforePublish(selectedHook?.hook || '', slides);
                             if (res.success) setPredictiveScore(res.score);
                             else toast.error("Scoring indisponible");
@@ -1792,7 +2071,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     }}
                     variant="outline"
                     size="sm"
-                    disabled={isScoring || isPending}
+                    disabled={isScoring}
                     className="gap-1.5 border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/10 text-xs sm:text-sm"
                 >
                     {isScoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4 shrink-0" />}
