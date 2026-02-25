@@ -346,6 +346,7 @@ export async function getDashboardStats() {
 
     return {
         posts,
+        lastSyncAt: profile?.lastSyncAt ?? null,
         stats: {
             views: viewsLast7,
             totalViews: totalViewsAllTime,
