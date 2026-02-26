@@ -39,14 +39,15 @@ export async function AnalyticsView() {
     const followerGrowthRate = stats.stats.followerGrowthRate ?? 0;
     const followerGrowthDirection = stats.stats.followerGrowthDirection ?? 'neutral';
     const now = new Date();
-    const today = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const tz = 'Europe/Paris';
+    const today = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
 
     const lastSync = stats.lastSyncAt ? new Date(stats.lastSyncAt) : null;
     const syncDate = lastSync
-        ? lastSync.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
+        ? lastSync.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })
         : null;
     const syncTime = lastSync
-        ? lastSync.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        ? lastSync.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: tz })
         : null;
 
     return (
