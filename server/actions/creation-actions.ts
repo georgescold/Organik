@@ -137,6 +137,187 @@ export type Slide = {
     image_url?: string;
 };
 
+// ===== LINGUISTIC FINGERPRINT HELPER =====
+// Extracts the creator's writing style from their posts (used by both generation and optimization)
+function computeLinguisticFingerprint(
+    topPosts: { post: { hookText: string | null; description: string | null; slides: string | null }; views: number }[],
+    existingPosts: { slides: string | null; hookText: string | null }[]
+): string {
+    const allCreatorTexts: string[] = [];
+    const allDescriptions: string[] = [];
+    const allHooks: string[] = [];
+
+    for (const vp of topPosts) {
+        if (vp.post.hookText) allHooks.push(vp.post.hookText);
+        if (vp.post.description) allDescriptions.push(vp.post.description);
+        try {
+            const s = JSON.parse(vp.post.slides || '[]') as Slide[];
+            s.forEach(slide => { if (slide.text) allCreatorTexts.push(slide.text); });
+        } catch { /* skip */ }
+    }
+
+    existingPosts.forEach(p => {
+        try {
+            const s = JSON.parse(p.slides || '[]') as Slide[];
+            s.forEach(slide => { if (slide.text) allCreatorTexts.push(slide.text); });
+        } catch { /* skip */ }
+        if (p.hookText) allHooks.push(p.hookText);
+    });
+
+    if (allCreatorTexts.length < 5) return '';
+
+    const allTexts = [...allCreatorTexts, ...allHooks];
+    const allJoined = allTexts.join(' ');
+    const descJoined = allDescriptions.join(' ');
+
+    // ── PONCTUATION ──
+    const ellipsisCount = (allJoined.match(/\.\.\./g) || []).length;
+    const questionCount = (allJoined.match(/\?/g) || []).length;
+    const exclamationCount = (allJoined.match(/!/g) || []).length;
+    const periodCount = (allJoined.match(/(?<!\.)\.(?!\.)/g) || []).length;
+    const commaCount = (allJoined.match(/,/g) || []).length;
+    const colonCount = (allJoined.match(/:/g) || []).length;
+    const dashCount = (allJoined.match(/[—–-]/g) || []).length;
+
+    // ── ÉMOJIS ──
+    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
+    const allEmojisSlides = allJoined.match(emojiRegex) || [];
+    const allEmojisDesc = descJoined.match(emojiRegex) || [];
+    const usesEmojisInSlides = allEmojisSlides.length > 0;
+    const usesEmojisInDesc = allEmojisDesc.length > 0;
+    const emojiFreq: Record<string, number> = {};
+    [...allEmojisSlides, ...allEmojisDesc].forEach(e => { emojiFreq[e] = (emojiFreq[e] || 0) + 1; });
+    const topEmojis = Object.entries(emojiFreq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([e]) => e);
+
+    // ── MAJUSCULES ──
+    const allCapsWords = (allJoined.match(/\b[A-ZÀ-Ü]{2,}\b/g) || []);
+    const usesAllCaps = allCapsWords.length > 2;
+    const topCapsWords = [...new Set(allCapsWords)].slice(0, 10);
+
+    // ── STRUCTURES DE PHRASES ──
+    const sentences = allCreatorTexts;
+    const avgSentenceLength = Math.round(sentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0) / sentences.length);
+    const shortSentences = sentences.filter(s => s.split(/\s+/).length <= 5).length;
+    const longSentences = sentences.filter(s => s.split(/\s+/).length > 12).length;
+
+    // ── TICS DE LANGAGE ──
+    const ticsPatterns: { pattern: RegExp; label: string }[] = [
+        { pattern: /\ben fait\b/gi, label: 'en fait' },
+        { pattern: /\bgenre\b/gi, label: 'genre' },
+        { pattern: /\bdu coup\b/gi, label: 'du coup' },
+        { pattern: /\bperso\b/gi, label: 'perso' },
+        { pattern: /\bfranch?ement\b/gi, label: 'franchement' },
+        { pattern: /\bcarrément\b/gi, label: 'carrément' },
+        { pattern: /\btranquille\b/gi, label: 'tranquille' },
+        { pattern: /\blittéral?ement\b/gi, label: 'littéralement' },
+        { pattern: /\bjuste\b/gi, label: 'juste' },
+        { pattern: /\btrop\b/gi, label: 'trop' },
+        { pattern: /\bvraiment\b/gi, label: 'vraiment' },
+        { pattern: /\bstyle\b/gi, label: 'style' },
+        { pattern: /\ben mode\b/gi, label: 'en mode' },
+        { pattern: /\bwsh\b/gi, label: 'wsh' },
+        { pattern: /\bfrr?\b/gi, label: 'frr' },
+        { pattern: /\bsah\b/gi, label: 'sah' },
+        { pattern: /\bgros\b/gi, label: 'gros' },
+        { pattern: /\bmdr\b/gi, label: 'mdr' },
+        { pattern: /\blol\b/gi, label: 'lol' },
+        { pattern: /\bptdr\b/gi, label: 'ptdr' },
+        { pattern: /\bbref\b/gi, label: 'bref' },
+        { pattern: /\bvoilà\b/gi, label: 'voilà' },
+        { pattern: /\bbon\b/gi, label: 'bon' },
+        { pattern: /\balors\b/gi, label: 'alors' },
+        { pattern: /\bregarde\b/gi, label: 'regarde' },
+        { pattern: /\bécoute\b/gi, label: 'écoute' },
+        { pattern: /\bsérieux\b/gi, label: 'sérieux' },
+        { pattern: /\btu sais\b/gi, label: 'tu sais' },
+        { pattern: /\btu vois\b/gi, label: 'tu vois' },
+    ];
+    const detectedTics: { label: string; count: number }[] = [];
+    for (const tic of ticsPatterns) {
+        const matches = allJoined.match(tic.pattern);
+        if (matches && matches.length >= 2) {
+            detectedTics.push({ label: tic.label, count: matches.length });
+        }
+    }
+    detectedTics.sort((a, b) => b.count - a.count);
+
+    // ── TUTOIEMENT VS VOUVOIEMENT ──
+    const tuCount = (allJoined.match(/\b(tu|t'|toi|ton|ta|tes)\b/gi) || []).length;
+    const vousCount = (allJoined.match(/\b(vous|votre|vos)\b/gi) || []).length;
+
+    // ── MOTS D'OUVERTURE ──
+    const slideStarts = allCreatorTexts.map(t => t.split(/\s+/)[0]?.toLowerCase());
+    const startFreq: Record<string, number> = {};
+    slideStarts.forEach(w => { if (w) startFreq[w] = (startFreq[w] || 0) + 1; });
+    const frequentStarts = Object.entries(startFreq)
+        .filter(([, count]) => count >= 3)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([word, count]) => `"${word}" (${count}x)`);
+
+    // ── BUILD FINGERPRINT ──
+    let fp = `\n🔍 EMPREINTE LINGUISTIQUE DU CRÉATEUR (analysé sur ${allCreatorTexts.length} slides + ${allHooks.length} hooks + ${allDescriptions.length} descriptions):\n`;
+
+    fp += `\nPONCTUATION — ton profil:\n`;
+    fp += `  "..." (suspense): ${ellipsisCount}x | "?" (questions): ${questionCount}x | "!" (exclamations): ${exclamationCount}x\n`;
+    fp += `  "." (points simples): ${periodCount}x | "," (virgules): ${commaCount}x | ":" (deux-points): ${colonCount}x | "—/-" (tirets): ${dashCount}x\n`;
+    if (ellipsisCount > questionCount && ellipsisCount > exclamationCount) {
+        fp += `  → Tu privilégies le SUSPENSE avec "..." — reproduis ce style.\n`;
+    } else if (questionCount > ellipsisCount) {
+        fp += `  → Tu poses beaucoup de QUESTIONS — reproduis ce style interrogatif.\n`;
+    } else if (exclamationCount > ellipsisCount) {
+        fp += `  → Tu utilises beaucoup les EXCLAMATIONS — reproduis cette énergie.\n`;
+    }
+
+    fp += `\nÉMOJIS:\n`;
+    if (usesEmojisInSlides && topEmojis.length > 0) {
+        fp += `  Slides: OUI — tu utilises des émojis dans tes slides. Tes favoris: ${topEmojis.join(' ')}\n`;
+        fp += `  → REPRODUIS cette utilisation d'émojis dans les nouvelles slides.\n`;
+    } else {
+        fp += `  Slides: NON — tu n'utilises PAS d'émojis dans tes slides. N'EN AJOUTE PAS.\n`;
+    }
+    if (usesEmojisInDesc && topEmojis.length > 0) {
+        fp += `  Descriptions: OUI — tu utilises des émojis dans tes descriptions. Favoris: ${topEmojis.join(' ')}\n`;
+    } else if (allDescriptions.length > 0) {
+        fp += `  Descriptions: NON — tu n'utilises PAS d'émojis dans tes descriptions.\n`;
+    }
+
+    if (usesAllCaps) {
+        fp += `\nMAJUSCULES: Tu utilises des mots en MAJUSCULES pour l'emphase. Exemples: ${topCapsWords.join(', ')}\n`;
+        fp += `  → REPRODUIS cette utilisation de caps pour l'impact.\n`;
+    } else {
+        fp += `\nMAJUSCULES: Tu n'utilises PAS ou peu de mots en majuscules.\n`;
+    }
+
+    fp += `\nSTRUCTURE DE PHRASES:\n`;
+    fp += `  Longueur moyenne: ${avgSentenceLength} mots/slide\n`;
+    fp += `  Phrases courtes (≤5 mots): ${shortSentences}/${sentences.length} (${Math.round(shortSentences / sentences.length * 100)}%)\n`;
+    fp += `  Phrases longues (>12 mots): ${longSentences}/${sentences.length} (${Math.round(longSentences / sentences.length * 100)}%)\n`;
+    if (shortSentences / sentences.length > 0.5) {
+        fp += `  → Tu as un style PUNCHY avec des phrases courtes. Reproduis ça.\n`;
+    } else if (longSentences / sentences.length > 0.3) {
+        fp += `  → Tu écris des phrases plus développées. Garde ce rythme.\n`;
+    } else {
+        fp += `  → Tu mélanges court et long. Reproduis ce rythme varié.\n`;
+    }
+
+    if (detectedTics.length > 0) {
+        fp += `\nTICS DE LANGAGE (expressions que tu utilises régulièrement):\n`;
+        detectedTics.slice(0, 8).forEach(t => {
+            fp += `  "${t.label}" → ${t.count}x\n`;
+        });
+        fp += `  → INTÈGRE naturellement ces expressions dans les nouvelles slides. Ce sont TES mots.\n`;
+    }
+
+    fp += `\nADRESSE: ${tuCount > vousCount ? `Tu TUTOIES ton audience (${tuCount}x "tu/t'/toi" vs ${vousCount}x "vous"). Garde le TU.` : vousCount > tuCount ? `Tu VOUVOIES ton audience (${vousCount}x "vous" vs ${tuCount}x "tu"). Garde le VOUS.` : `Mélange tu/vous. Adapte selon le contexte.`}\n`;
+
+    if (frequentStarts.length > 0) {
+        fp += `\nMOTS D'OUVERTURE FRÉQUENTS DE TES SLIDES: ${frequentStarts.join(', ')}\n`;
+    }
+
+    return fp;
+}
+
 export async function generateHooks() {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };
@@ -785,195 +966,10 @@ Génère du contenu ORIGINAL. Chaque slide doit apporter une perspective ou form
         return parts.length > 0 ? `\n📊 INTELLIGENCE DE PERFORMANCE (basé sur ${narrativeInsights.metadata?.basedOnPostsCount || 0} posts analysés):\n${parts.join('\n')}` : '';
     })();
 
-    // 4. Linguistic fingerprint — analyze the creator's EXACT writing style
+    // 4. Linguistic fingerprint — use shared helper
     const linguisticFingerprint = (() => {
-        // Collect ALL text from the creator: slides, hooks, descriptions
-        const allCreatorTexts: string[] = [];
-        const allDescriptions: string[] = [];
-        const allHooks: string[] = [];
-
-        for (const vp of allTopPosts) {
-            if (vp.post.hookText) allHooks.push(vp.post.hookText);
-            if (vp.post.description) allDescriptions.push(vp.post.description);
-            try {
-                const s = JSON.parse(vp.post.slides || '[]') as Slide[];
-                s.forEach(slide => { if (slide.text) allCreatorTexts.push(slide.text); });
-            } catch { /* skip */ }
-        }
-
-        // Also include existing posts slides for more data
-        existingPosts.forEach(p => {
-            try {
-                const s = JSON.parse(p.slides || '[]') as Slide[];
-                s.forEach(slide => { if (slide.text) allCreatorTexts.push(slide.text); });
-            } catch { /* skip */ }
-            if (p.hookText) allHooks.push(p.hookText);
-        });
-
-        if (allCreatorTexts.length < 5) return ''; // Not enough data
-
-        const allTexts = [...allCreatorTexts, ...allHooks]; // Combined for analysis
-        const allJoined = allTexts.join(' ');
-        const descJoined = allDescriptions.join(' ');
-
-        // ── PONCTUATION ──
-        const totalChars = allJoined.length;
-        const ellipsisCount = (allJoined.match(/\.\.\./g) || []).length;
-        const questionCount = (allJoined.match(/\?/g) || []).length;
-        const exclamationCount = (allJoined.match(/!/g) || []).length;
-        const periodCount = (allJoined.match(/(?<!\.)\.(?!\.)/g) || []).length; // single periods only
-        const commaCount = (allJoined.match(/,/g) || []).length;
-        const colonCount = (allJoined.match(/:/g) || []).length;
-        const dashCount = (allJoined.match(/[—–-]/g) || []).length;
-
-        // ── ÉMOJIS ──
-        const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
-        const allEmojisSlides = allJoined.match(emojiRegex) || [];
-        const allEmojisDesc = descJoined.match(emojiRegex) || [];
-        const usesEmojisInSlides = allEmojisSlides.length > 0;
-        const usesEmojisInDesc = allEmojisDesc.length > 0;
-        // Find most used emojis
-        const emojiFreq: Record<string, number> = {};
-        [...allEmojisSlides, ...allEmojisDesc].forEach(e => { emojiFreq[e] = (emojiFreq[e] || 0) + 1; });
-        const topEmojis = Object.entries(emojiFreq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([e]) => e);
-
-        // ── MAJUSCULES ──
-        const allCapsWords = (allJoined.match(/\b[A-ZÀ-Ü]{2,}\b/g) || []);
-        const usesAllCaps = allCapsWords.length > 2;
-        const topCapsWords = [...new Set(allCapsWords)].slice(0, 10);
-
-        // ── STRUCTURES DE PHRASES ──
-        const sentences = allCreatorTexts; // Each slide is roughly a sentence
-        const avgSentenceLength = Math.round(sentences.reduce((sum, s) => sum + s.split(/\s+/).length, 0) / sentences.length);
-        const shortSentences = sentences.filter(s => s.split(/\s+/).length <= 5).length;
-        const longSentences = sentences.filter(s => s.split(/\s+/).length > 12).length;
-
-        // ── TICS DE LANGAGE ──
-        // Common French filler/style words
-        const ticsPatterns: { pattern: RegExp; label: string }[] = [
-            { pattern: /\ben fait\b/gi, label: 'en fait' },
-            { pattern: /\bgenre\b/gi, label: 'genre' },
-            { pattern: /\bdu coup\b/gi, label: 'du coup' },
-            { pattern: /\bperso\b/gi, label: 'perso' },
-            { pattern: /\bfranch?ement\b/gi, label: 'franchement' },
-            { pattern: /\bcarrément\b/gi, label: 'carrément' },
-            { pattern: /\btranquille\b/gi, label: 'tranquille' },
-            { pattern: /\blittéral?ement\b/gi, label: 'littéralement' },
-            { pattern: /\bjuste\b/gi, label: 'juste' },
-            { pattern: /\btrop\b/gi, label: 'trop' },
-            { pattern: /\bvraiment\b/gi, label: 'vraiment' },
-            { pattern: /\bstyle\b/gi, label: 'style' },
-            { pattern: /\ben mode\b/gi, label: 'en mode' },
-            { pattern: /\bwsh\b/gi, label: 'wsh' },
-            { pattern: /\bfrr?\b/gi, label: 'frr' },
-            { pattern: /\bsah\b/gi, label: 'sah' },
-            { pattern: /\bgros\b/gi, label: 'gros' },
-            { pattern: /\bmdr\b/gi, label: 'mdr' },
-            { pattern: /\blol\b/gi, label: 'lol' },
-            { pattern: /\bptdr\b/gi, label: 'ptdr' },
-            { pattern: /\bbref\b/gi, label: 'bref' },
-            { pattern: /\bvoilà\b/gi, label: 'voilà' },
-            { pattern: /\bbon\b/gi, label: 'bon' },
-            { pattern: /\balors\b/gi, label: 'alors' },
-            { pattern: /\bregarde\b/gi, label: 'regarde' },
-            { pattern: /\bécoute\b/gi, label: 'écoute' },
-            { pattern: /\bsérieux\b/gi, label: 'sérieux' },
-            { pattern: /\btu sais\b/gi, label: 'tu sais' },
-            { pattern: /\btu vois\b/gi, label: 'tu vois' },
-        ];
-        const detectedTics: { label: string; count: number }[] = [];
-        for (const tic of ticsPatterns) {
-            const matches = allJoined.match(tic.pattern);
-            if (matches && matches.length >= 2) { // At least 2 occurrences = tic
-                detectedTics.push({ label: tic.label, count: matches.length });
-            }
-        }
-        detectedTics.sort((a, b) => b.count - a.count);
-
-        // ── TUTOIEMENT VS VOUVOIEMENT ──
-        const tuCount = (allJoined.match(/\b(tu|t'|toi|ton|ta|tes)\b/gi) || []).length;
-        const vousCount = (allJoined.match(/\b(vous|votre|vos)\b/gi) || []).length;
-
-        // ── CONSTRUCTION ──
-        // Detect if creator starts slides with specific patterns
-        const slideStarts = allCreatorTexts.map(t => {
-            const firstWord = t.split(/\s+/)[0]?.toLowerCase();
-            return firstWord;
-        });
-        const startFreq: Record<string, number> = {};
-        slideStarts.forEach(w => { if (w) startFreq[w] = (startFreq[w] || 0) + 1; });
-        const frequentStarts = Object.entries(startFreq)
-            .filter(([, count]) => count >= 3)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([word, count]) => `"${word}" (${count}x)`);
-
-        // ── BUILD FINGERPRINT ──
-        let fp = `\n🔍 EMPREINTE LINGUISTIQUE DU CRÉATEUR (analysé sur ${allCreatorTexts.length} slides + ${allHooks.length} hooks + ${allDescriptions.length} descriptions):\n`;
-
-        // Ponctuation profile
-        fp += `\nPONCTUATION — ton profil:\n`;
-        fp += `  "..." (suspense): ${ellipsisCount}x | "?" (questions): ${questionCount}x | "!" (exclamations): ${exclamationCount}x\n`;
-        fp += `  "." (points simples): ${periodCount}x | "," (virgules): ${commaCount}x | ":" (deux-points): ${colonCount}x | "—/-" (tirets): ${dashCount}x\n`;
-        if (ellipsisCount > questionCount && ellipsisCount > exclamationCount) {
-            fp += `  → Tu privilégies le SUSPENSE avec "..." — reproduis ce style.\n`;
-        } else if (questionCount > ellipsisCount) {
-            fp += `  → Tu poses beaucoup de QUESTIONS — reproduis ce style interrogatif.\n`;
-        } else if (exclamationCount > ellipsisCount) {
-            fp += `  → Tu utilises beaucoup les EXCLAMATIONS — reproduis cette énergie.\n`;
-        }
-
-        // Emoji profile
-        fp += `\nÉMOJIS:\n`;
-        if (usesEmojisInSlides && topEmojis.length > 0) {
-            fp += `  Slides: OUI — tu utilises des émojis dans tes slides. Tes favoris: ${topEmojis.join(' ')}\n`;
-            fp += `  → REPRODUIS cette utilisation d'émojis dans les nouvelles slides.\n`;
-        } else {
-            fp += `  Slides: NON — tu n'utilises PAS d'émojis dans tes slides. N'EN AJOUTE PAS.\n`;
-        }
-        if (usesEmojisInDesc && topEmojis.length > 0) {
-            fp += `  Descriptions: OUI — tu utilises des émojis dans tes descriptions. Favoris: ${topEmojis.join(' ')}\n`;
-        } else if (allDescriptions.length > 0) {
-            fp += `  Descriptions: NON — tu n'utilises PAS d'émojis dans tes descriptions.\n`;
-        }
-
-        // Caps profile
-        if (usesAllCaps) {
-            fp += `\nMAJUSCULES: Tu utilises des mots en MAJUSCULES pour l'emphase. Exemples: ${topCapsWords.join(', ')}\n`;
-            fp += `  → REPRODUIS cette utilisation de caps pour l'impact.\n`;
-        } else {
-            fp += `\nMAJUSCULES: Tu n'utilises PAS ou peu de mots en majuscules.\n`;
-        }
-
-        // Sentence structure
-        fp += `\nSTRUCTURE DE PHRASES:\n`;
-        fp += `  Longueur moyenne: ${avgSentenceLength} mots/slide\n`;
-        fp += `  Phrases courtes (≤5 mots): ${shortSentences}/${sentences.length} (${Math.round(shortSentences / sentences.length * 100)}%)\n`;
-        fp += `  Phrases longues (>12 mots): ${longSentences}/${sentences.length} (${Math.round(longSentences / sentences.length * 100)}%)\n`;
-        if (shortSentences / sentences.length > 0.5) {
-            fp += `  → Tu as un style PUNCHY avec des phrases courtes. Reproduis ça.\n`;
-        } else if (longSentences / sentences.length > 0.3) {
-            fp += `  → Tu écris des phrases plus développées. Garde ce rythme.\n`;
-        } else {
-            fp += `  → Tu mélanges court et long. Reproduis ce rythme varié.\n`;
-        }
-
-        // Tics de langage
-        if (detectedTics.length > 0) {
-            fp += `\nTICS DE LANGAGE (expressions que tu utilises régulièrement):\n`;
-            detectedTics.slice(0, 8).forEach(t => {
-                fp += `  "${t.label}" → ${t.count}x\n`;
-            });
-            fp += `  → INTÈGRE naturellement ces expressions dans les nouvelles slides. Ce sont TES mots.\n`;
-        }
-
-        // Tutoiement
-        fp += `\nADRESSE: ${tuCount > vousCount ? `Tu TUTOIES ton audience (${tuCount}x "tu/t'/toi" vs ${vousCount}x "vous"). Garde le TU.` : vousCount > tuCount ? `Tu VOUVOIES ton audience (${vousCount}x "vous" vs ${tuCount}x "tu"). Garde le VOUS.` : `Mélange tu/vous. Adapte selon le contexte.`}\n`;
-
-        // Frequent sentence starts
-        if (frequentStarts.length > 0) {
-            fp += `\nMOTS D'OUVERTURE FRÉQUENTS DE TES SLIDES: ${frequentStarts.join(', ')}\n`;
-        }
+        let fp = computeLinguisticFingerprint(allTopPosts, existingPosts);
+        if (!fp) return '';
 
         // ── FORMATTING BLUEPRINT (visual text analysis per slide type) ──
         // Analyze CTA (last slide) vs body slides vs hook to extract formatting rules
@@ -1225,8 +1221,13 @@ ${(() => {
 DESCRIPTION:
 Génère aussi une description TikTok/Instagram pour le post.
 - La description COMPLÈTE le carrousel, ne le répète pas. Crée de l'urgence ou de la curiosité.
-${descriptionStyleContext ? `- INSPIRE-TOI du style de tes meilleures descriptions (même ton, même énergie, même type de structure) mais avec un CONTENU ORIGINAL:\n${descriptionStyleContext}` : '- Écris une description naturelle qui ressemble à ce que tu posterais vraiment.'}
-- L'empreinte linguistique s'applique AUSSI à la description: mêmes tics de langage, même utilisation (ou non) d'émojis, même ponctuation, même registre de langue.
+${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien fonctionné pour te donner le ton général:\n${descriptionStyleContext}\n- Tu peux t'en inspirer LIBREMENT: garde le même ton et la même personnalité, mais tu as carte blanche sur la STRUCTURE, la LONGUEUR, et l'APPROCHE. Chaque description doit être UNIQUE et adaptée au contenu du carrousel.` : '- Écris une description naturelle qui ressemble à ce que tu posterais vraiment.'}
+- La description doit rester COHÉRENTE avec le personnage de ${authority} (même registre de langue, même énergie globale), mais tu es LIBRE de varier:
+  * La longueur (courte et percutante OU plus développée)
+  * La structure (question, affirmation, storytelling, interpellation directe, etc.)
+  * Le style (mystérieux, direct, provocateur, informatif, personnel...)
+  * L'utilisation d'émojis (tu peux en mettre plus, moins, ou différemment selon le post)
+- L'OBJECTIF: que chaque description soit mémorable et donne envie de swiper, PAS qu'elle ressemble aux précédentes.
 - N'inclus PAS de hashtags (ajoutés automatiquement).
 
 ${'═'.repeat(60)}
@@ -1865,15 +1866,39 @@ export async function improveCarouselFromScore(
     if (!activeProfileId) return { error: 'No active profile' };
 
     try {
-        const [clientRes, profile, insights] = await Promise.all([
+        const [clientRes, profile, insights, topPosts, recentPosts] = await Promise.all([
             getAnthropicClient(session.user.id),
             prisma.profile.findUnique({ where: { id: activeProfileId } }),
-            getCachedInsights(activeProfileId, '').catch(() => null)
+            getCachedInsights(activeProfileId, '').catch(() => null),
+            // Fetch top posts for linguistic fingerprint
+            prisma.metrics.findMany({
+                where: {
+                    post: { profileId: activeProfileId, status: { not: 'draft' } },
+                    views: { gte: 1 }
+                },
+                take: 20,
+                orderBy: { views: 'desc' },
+                include: { post: true }
+            }),
+            // Fetch recent posts for more style data
+            prisma.post.findMany({
+                where: {
+                    profileId: activeProfileId,
+                    status: { in: ['created', 'draft'] },
+                    slides: { not: '[]' }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 20,
+                select: { slides: true, hookText: true }
+            })
         ]);
 
         const client = clientRes.client;
         const authority = profile?.persona || "Expert Creator";
         const targetAudience = profile?.targetAudience || "General Audience";
+
+        // Compute the creator's linguistic fingerprint for style-consistent improvements
+        const linguisticFingerprint = computeLinguisticFingerprint(topPosts, recentPosts);
 
         const currentSlidesText = currentSlides.map(s =>
             `Slide ${s.slide_number} [${s.intention}]: "${s.text}"`
@@ -1894,33 +1919,38 @@ export async function improveCarouselFromScore(
             max_tokens: 2048,
             messages: [{
                 role: "user",
-                content: `You are a viral content optimizer for "${authority}", targeting ${targetAudience}.
+                content: `Tu es un optimiseur de contenu viral pour "${authority}", ciblant ${targetAudience}.
+LANGUE: FRANÇAIS uniquement. Tu tutoies. Tu parles comme un vrai créateur français, naturel, direct.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points.
+${linguisticFingerprint ? `
+${linguisticFingerprint}
+RÈGLE CRITIQUE: Les améliorations DOIVENT respecter l'empreinte linguistique ci-dessus. Garde les mêmes tics de langage, la même ponctuation, le même registre, la même énergie. Le texte amélioré doit sonner EXACTEMENT comme le créateur, pas comme une IA.` : ''}
 
-CURRENT CAROUSEL (needs improvement):
+CARROUSEL ACTUEL (à améliorer):
 Hook: "${hookText}"
 ${currentSlidesText}
 
-PREDICTIVE SCORE ANALYSIS:
+ANALYSE DU SCORE PRÉDICTIF:
 ${Object.entries(scores).map(([k, v]) => `- ${k}: ${v}/20`).join('\n')}
-Weakest areas: ${weakest.join(', ')}
+Points faibles: ${weakest.join(', ')}
 
-SPECIFIC IMPROVEMENTS REQUIRED:
+AMÉLIORATIONS SPÉCIFIQUES REQUISES:
 ${improvements.map((imp, i) => `${i + 1}. ${imp}`).join('\n')}
 ${narrativeFacts}
 
-TASK: Rewrite the carousel slides applying ALL the improvements above. Rules:
-- Keep slide 1 as the EXACT same hook text: "${hookText}"
-- Keep the same number of slides (${currentSlides.length})
-- Keep the same image assignments (do NOT change image_id or image_url)
-- Focus on fixing the WEAKEST areas: ${weakest.join(', ')}
-- Sound HUMAN, not AI. Write in FRENCH like a creator talks.
-- PRESERVE the existing structure: if slides use numbered lists (1., 2., 3.), keep that format. If slides use narrative/story flow, keep that format.
-- Each slide must be a complete unit of meaning — the reader should understand it without reading the previous slide.
+TÂCHE: Réécris les slides du carrousel en appliquant TOUTES les améliorations ci-dessus. Règles:
+- Garde la slide 1 avec le MÊME texte exact du hook: "${hookText}"
+- Garde le même nombre de slides (${currentSlides.length})
+- Ne change PAS les images (image_id, image_url)
+- Concentre-toi sur les POINTS FAIBLES: ${weakest.join(', ')}
+- Sonne HUMAIN, pas IA. Écris en FRANÇAIS comme le créateur parle.
+- PRÉSERVE la structure existante: si les slides utilisent des listes numérotées (1., 2., 3.), garde ce format. Si c'est un flux narratif, garde ce flux.
+- Chaque slide doit être une unité complète de sens.
 
-Return JSON ONLY (array of slides):
+Retourne du JSON UNIQUEMENT (tableau de slides):
 [
     { "slide_number": 1, "text": "${hookText}", "intention": "Hook" },
-    { "slide_number": 2, "text": "improved text here", "intention": "Tension" },
+    { "slide_number": 2, "text": "texte amélioré ici", "intention": "Tension" },
     ...
 ]`
             }]
