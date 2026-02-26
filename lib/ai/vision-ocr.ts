@@ -47,7 +47,7 @@ export async function extractTextFromImage(imageUrl: string, userApiKey: string,
             // Call Claude Vision API
             const message = await anthropic.messages.create({
                 model: 'claude-haiku-4-5-20251001', // Haiku for simple OCR tasks (cost-effective)
-                max_tokens: 1024,
+                max_tokens: 256, // Sufficient for carousel slide text (typically 20-150 chars)
                 messages: [{
                     role: 'user',
                     content: [

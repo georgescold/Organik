@@ -278,13 +278,15 @@ export async function scrapeAndSyncTikTokData() {
                 console.log(`   Origin: ${matchedPost.origin}, Has slides: ${matchedPost.slides ? 'YES' : 'NO'}, SlideCount: ${matchedPost.slideCount}`);
 
                 // Update tiktokId if missing (for tracking only)
-                if (!matchedPost.tiktokId) {
+                // ✅ FIX: Check that no other post already owns this tiktokId before assigning
+                if (!matchedPost.tiktokId && !existingTiktokIds.has(tiktokId)) {
                     await prisma.post.update({
                         where: { id: matchedPost.id },
                         data: {
-                            tiktokId  // ✅ ONLY update tiktokId - NEVER touch slides, description, or other content
+                            tiktokId
                         }
                     });
+                    existingTiktokIds.set(tiktokId, matchedPost.id);
                 }
 
                 // Update metrics only - NEVER touch content fields (slides, description, etc.)

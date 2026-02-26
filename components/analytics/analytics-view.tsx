@@ -39,8 +39,16 @@ export async function AnalyticsView() {
     const followerGrowthRate = stats.stats.followerGrowthRate ?? 0;
     const followerGrowthDirection = stats.stats.followerGrowthDirection ?? 'neutral';
     const now = new Date();
-    const today = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-    const syncTime = now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    const tz = 'Europe/Paris';
+    const today = now.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
+
+    const lastSync = stats.lastSyncAt ? new Date(stats.lastSyncAt) : null;
+    const syncDate = lastSync
+        ? lastSync.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })
+        : null;
+    const syncTime = lastSync
+        ? lastSync.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+        : null;
 
     return (
         <div className="space-y-8 sm:space-y-10">
@@ -48,7 +56,14 @@ export async function AnalyticsView() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div className="space-y-1">
                     <h2 className="text-xl sm:text-2xl font-black tracking-tight">Performance</h2>
-                    <p className="text-xs sm:text-sm text-muted-foreground capitalize">{today} — <span className="normal-case">dernière synchro à {syncTime}</span></p>
+                    <p className="text-xs sm:text-sm text-muted-foreground capitalize">
+                        {today}
+                        {lastSync ? (
+                            <> — <span className="normal-case">dernière synchro le {syncDate} à {syncTime}</span></>
+                        ) : (
+                            <> — <span className="normal-case">aucune synchronisation</span></>
+                        )}
+                    </p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                     <SyncButton />
