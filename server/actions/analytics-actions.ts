@@ -585,7 +585,7 @@ export async function deletePost(postId: string) {
 
 import { analyzePostContent } from '@/lib/ai/claude';
 
-export async function analyzePost(postId: string) {
+export async function analyzePost(postId: string, force: boolean = false) {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
@@ -604,11 +604,26 @@ export async function analyzePost(postId: string) {
             where: { id: postId, userId: session.user.id },
             include: {
                 metrics: true,
-                profile: true
+                profile: true,
+                analysis: true
             }
         });
 
         if (!post) return { success: false, error: 'Post not found' };
+
+        // Skip AI call if analysis already exists (unless forced)
+        if (!force && post.analysis) {
+            return {
+                success: false,
+                alreadyAnalyzed: true,
+                analysis: {
+                    qualityScore: post.analysis.qualityScore,
+                    performanceScore: post.analysis.performanceScore,
+                    intelligentScore: post.analysis.intelligentScore,
+                    analyzedAt: post.analysis.analyzedAt
+                }
+            };
+        }
 
         // 1. Prepare Data for AI
         const rawPost = post as any;

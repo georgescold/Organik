@@ -136,13 +136,23 @@ function PostRow({ post }: { post: any }) {
         });
     };
 
-    const handleAnalyze = async (e: React.MouseEvent) => {
+    const handleAnalyze = async (e: React.MouseEvent, force: boolean = false) => {
         e.stopPropagation();
         setIsAnalyzing(true);
         try {
-            const res = await analyzePost(post.id);
-            if (res.success) toast.success('Analyse terminée !');
-            else toast.error(res.error || "Erreur d'analyse");
+            const res = await analyzePost(post.id, force) as any;
+            if (res.success) {
+                toast.success('Analyse terminée !');
+            } else if (res.alreadyAnalyzed) {
+                toast('Ce post a déjà été analysé. Relancer l\'analyse ?', {
+                    action: {
+                        label: 'Réanalyser',
+                        onClick: () => handleAnalyze(e, true),
+                    },
+                });
+            } else {
+                toast.error(res.error || "Erreur d'analyse");
+            }
         } catch {
             toast.error("Erreur système");
         } finally {

@@ -18,7 +18,7 @@ export async function analyzeImage(imageBase64: string, mediaType: string = "ima
         const msg = await client.messages.create({
             model: MODEL,
             max_tokens: 1024,
-            system: PROMPTS.IMAGE_ANALYSIS_SYSTEM,
+            system: [{ type: "text" as const, text: PROMPTS.IMAGE_ANALYSIS_SYSTEM, cache_control: { type: "ephemeral" as const } }],
             messages: [
                 {
                     role: "user",
@@ -165,7 +165,7 @@ export async function analyzePostContent(images: string[], textContext: string, 
     const msg = await client.messages.create({
         model: MODEL,
         max_tokens: 1500, // JSON can be long
-        system: PROMPTS.IFS_ANALYSIS_SYSTEM,
+        system: [{ type: "text" as const, text: PROMPTS.IFS_ANALYSIS_SYSTEM, cache_control: { type: "ephemeral" as const } }],
         messages: [
             {
                 role: "user",

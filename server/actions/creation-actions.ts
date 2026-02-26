@@ -396,7 +396,7 @@ FORMAT (JSON UNIQUEMENT):
         const msg = await anthropic.messages.create({
             model: MODEL,
             max_tokens: 1024,
-            system: systemPrompt,
+            system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
             messages: [{
                 role: "user", content: `Génère 3 hooks viraux (2 Optimized, 1 Wildcard). Inspire-toi de l'analyse de tes hooks performants: garde la même voix mais propose des angles et formulations INÉDITS.`
             }]
@@ -535,7 +535,7 @@ FORMAT JSON (objet seul, PAS un tableau) :
         const msg = await client.messages.create({
             model: MODEL,
             max_tokens: 500,
-            system: systemPrompt,
+            system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
             messages: [{ role: "user", content: `Génère un hook de remplacement de type ${hookType}. L'angle "${rejectedHook.angle}" ne me plaît pas, propose quelque chose de TOTALEMENT différent.` }]
         });
 
@@ -646,11 +646,11 @@ ${last3PostsSlideTexts.map(t => `  ✗ "${t}"`).join('\n')}
 Ces textes viennent des 3 derniers posts créés. Chaque nouveau post DOIT avoir un contenu 100% différent pour éviter la répétition visuelle et textuelle.\n`;
         }
 
-        // SOFT: all other existing texts — avoid duplication
+        // SOFT: all other existing texts — avoid duplication (limited to 20 for token efficiency)
         const olderTexts = existingSlideTexts.filter(t => !last3PostsSlideTexts.includes(t));
         if (olderTexts.length > 0) {
             ctx += `\n⚠️ TEXTES DÉJÀ UTILISÉS (évite de les réutiliser):
-${olderTexts.slice(0, 100).map(t => `  - "${t}"`).join('\n')}
+${olderTexts.slice(0, 20).map(t => `  - "${t}"`).join('\n')}
 Génère du contenu ORIGINAL. Chaque slide doit apporter une perspective ou formulation NOUVELLE.\n`;
         }
 
@@ -719,16 +719,6 @@ Génère du contenu ORIGINAL. Chaque slide doit apporter une perspective ou form
             post.slides.forEach(s => {
                 analysis += `  [${s.slide_number}] "${s.text}"\n`;
             });
-            // Highlight the transitions and emotional arc
-            analysis += `Arc narratif:\n`;
-            analysis += `  → Ouverture: "${slideTexts[0]}"\n`;
-            if (slideTexts.length > 2) {
-                analysis += `  → Développement: "${slideTexts[1]}" → "${slideTexts[2]}"\n`;
-            }
-            if (slideTexts.length > 4) {
-                analysis += `  → Cœur de valeur: "${slideTexts[Math.floor(totalSlides / 2)]}"\n`;
-            }
-            analysis += `  → Conclusion: "${slideTexts[totalSlides - 1]}"\n`;
         }
 
         // Cross-post pattern extraction
@@ -1156,10 +1146,7 @@ Génère du contenu ORIGINAL. Chaque slide doit apporter une perspective ou form
     })();
 
     try {
-        const msg = await client.messages.create({
-            model: MODEL,
-            max_tokens: 2048,
-            system: `Tu es ${authority}. Tu ne "joues" pas un rôle — tu ES cette personne. Chaque mot que tu écris doit sonner exactement comme ${authority} parlerait à son audience en DM. Tu es un expert de la niche "${(profile as any)?.niche || 'General'}" et tu crées du contenu carrousel qui génère des milliers de vues.
+        const carouselSystemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle — tu ES cette personne. Chaque mot que tu écris doit sonner exactement comme ${authority} parlerait à son audience en DM. Tu es un expert de la niche "${(profile as any)?.niche || 'General'}" et tu crées du contenu carrousel qui génère des milliers de vues.
 
 LANGUE: FRANCAIS natif uniquement. Tu tutoies. Tu parles comme un vrai createur francais, naturel, direct, avec du rythme. JAMAIS de ton robotique ou corporate.
 PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points. Les tirets longs font "GPT/IA" et cassent l'authenticite.
@@ -1260,7 +1247,11 @@ Retourne UNIQUEMENT un objet JSON:
         ...
     ],
     "description": "La description générée"
-}`,
+}`;
+        const msg = await client.messages.create({
+            model: MODEL,
+            max_tokens: 2048,
+            system: [{ type: "text" as const, text: carouselSystemPrompt, cache_control: { type: "ephemeral" as const } }],
             messages: [{ role: "user", content: `Hook: "${hook}". Génère un carrousel viral optimal (7-8 slides) ET une description assortie. Inspire-toi de l'analyse de tes posts performants: garde la même voix et le même style, mais apporte un angle NOUVEAU et des idées FRAÎCHES.` }]
         });
         const text = (msg.content[0] as any).text;

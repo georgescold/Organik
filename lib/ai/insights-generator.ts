@@ -150,7 +150,7 @@ IMPORTANT:
             max_tokens: 2048,
             messages: [{
                 role: 'user',
-                content: prompt
+                content: [{ type: "text" as const, text: prompt, cache_control: { type: "ephemeral" as const } }]
             }]
         });
 

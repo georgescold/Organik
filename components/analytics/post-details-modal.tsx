@@ -113,7 +113,7 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
         }
     };
 
-    const handleAnalyze = async () => {
+    const handleAnalyze = async (force: boolean = false) => {
         if (!post?.slides || post.slides.length === 0) {
             toast.error("Impossible d'analyser : aucune image trouvée. Veuillez d'abord récupérer les images.");
             return;
@@ -121,12 +121,19 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
 
         setLoading(true);
         try {
-            const result = await analyzePost(postId);
+            const result = await analyzePost(postId, force) as any;
             if (result.success) {
                 toast.success("Analyse terminée !");
                 await fetchPost();
+            } else if (result.alreadyAnalyzed) {
+                toast('Ce post a déjà été analysé. Relancer l\'analyse ?', {
+                    action: {
+                        label: 'Réanalyser',
+                        onClick: () => handleAnalyze(true),
+                    },
+                });
             } else {
-                toast.error("Erreur lors de l'analyse");
+                toast.error(result.error || "Erreur lors de l'analyse");
             }
         } catch (e) {
             toast.error("Erreur système");
