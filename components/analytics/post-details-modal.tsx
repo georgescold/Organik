@@ -162,7 +162,7 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
                             <Button
                                 variant="secondary"
                                 size="sm"
-                                onClick={handleAnalyze}
+                                onClick={() => handleAnalyze()}
                                 disabled={loading}
                                 className="bg-primary/10 text-primary hover:bg-primary/20 border-primary/20 flex-1 sm:flex-none"
                             >
