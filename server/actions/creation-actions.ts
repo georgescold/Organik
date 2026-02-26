@@ -1222,7 +1222,9 @@ DESCRIPTION:
 Génère aussi une description TikTok/Instagram pour le post.
 - La description COMPLÈTE le carrousel, ne le répète pas. Crée de l'urgence ou de la curiosité.
 ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien fonctionné pour te donner le ton général:\n${descriptionStyleContext}\n- Tu peux t'en inspirer LIBREMENT: garde le même ton et la même personnalité, mais tu as carte blanche sur la STRUCTURE, la LONGUEUR, et l'APPROCHE. Chaque description doit être UNIQUE et adaptée au contenu du carrousel.` : '- Écris une description naturelle qui ressemble à ce que tu posterais vraiment.'}
-- La description doit rester COHÉRENTE avec le personnage de ${authority} (même registre de langue, même énergie globale), mais tu es LIBRE de varier:
+- La description doit rester COHÉRENTE avec le personnage de ${authority} (même registre de langue, même énergie globale).
+- OBLIGATOIRE: Les TICS DE LANGAGE du créateur s'appliquent AUSSI à la description. Ce sont ses mots signature — ils doivent apparaître naturellement dans la description comme dans les slides.
+- Tu es LIBRE de varier:
   * La longueur (courte et percutante OU plus développée)
   * La structure (question, affirmation, storytelling, interpellation directe, etc.)
   * Le style (mystérieux, direct, provocateur, informatif, personnel...)
