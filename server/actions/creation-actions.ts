@@ -9,6 +9,8 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // Claude Sonnet 4.6 — best quality/cost ratio ($3/$15 per MTok vs Opus $15/$75)
 const MODEL = 'claude-sonnet-4-6';
+// Haiku — for trivial tasks (image-to-slide mapping) where Sonnet is overkill
+const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 const VIRAL_THRESHOLD = 10000; // Posts with 10k+ views are considered truly viral
 
 // Strip em-dashes from all AI-generated text (GPT-style long dashes)
@@ -1150,9 +1152,7 @@ PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyen
 TON AUDIENCE: ${targetAudience}
 Tu sais exactement ce qui les empêche de dormir, ce qu'ils désirent, et quels mots les font s'arrêter de scroller. Chaque slide doit leur parler DIRECTEMENT, comme si tu leur envoyais un message personnel.
 
-${'═'.repeat(60)}
-🧠 ANALYSE DE TES POSTS ${isViralData ? 'VIRAUX (10K+ VUES)' : 'LES PLUS PERFORMANTS'} — C'EST TA BASE
-${'═'.repeat(60)}
+--- ANALYSE DE TES POSTS ${isViralData ? 'VIRAUX (10K+ VUES)' : 'LES PLUS PERFORMANTS'} ---
 ${deepViralAnalysis}
 ${performanceIntelligence}
 ${linguisticFingerprint}
@@ -1176,9 +1176,7 @@ CE QUI DOIT ÊTRE NOUVEAU À CHAQUE POST:
 
 En résumé: MÊME VOIX (style, ton, tics) + NOUVEAU CONTENU (angle, exemples, révélations) = post qui sonne comme toi mais qui surprend ton audience.
 
-${'═'.repeat(60)}
-📐 RÈGLES DE CRÉATION (appliquées SUR la base de ton analyse)
-${'═'.repeat(60)}
+--- RÈGLES DE CRÉATION ---
 
 RÉTENTION & SWIPE:
 - Chaque slide (sauf CTA) doit donner envie de voir la suivante.
@@ -1232,16 +1230,12 @@ ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien f
 - L'OBJECTIF: que chaque description soit mémorable et donne envie de swiper, PAS qu'elle ressemble aux précédentes.
 - N'inclus PAS de hashtags (ajoutés automatiquement).
 
-${'═'.repeat(60)}
-⛔ CONTRAINTES
-${'═'.repeat(60)}
+--- CONTRAINTES ---
 - INTERDIT: le caractère flèche '→'
 ${narrativeContext}
 ${uniquenessContext}
 
-${'═'.repeat(60)}
-📤 FORMAT DE SORTIE
-${'═'.repeat(60)}
+--- FORMAT DE SORTIE ---
 Retourne UNIQUEMENT un objet JSON:
 {
     "slides": [
@@ -1298,34 +1292,10 @@ Retourne UNIQUEMENT un objet JSON:
             }
         }
 
-        // 4. Validate narrative consistency (if narrative facts exist)
-        if (narrativeInsights?.narrativeFacts && narrativeInsights.narrativeFacts.length > 0) {
-            const allSlideText = slides.map((s: Slide) => s.text).join(' ');
-            const contradictionCheck = await client.messages.create({
-                model: MODEL,
-                max_tokens: 256,
-                messages: [{
-                    role: "user",
-                    content: `Check if this carousel text contradicts ANY of these established facts about the creator:
+        // Narrative consistency is enforced via the system prompt (narrativeFacts + NEVER CONTRADICT)
+        // No separate validation call needed — saves ~500 tokens per carousel
 
-FACTS: ${narrativeInsights.narrativeFacts.map((f: string) => `- ${f}`).join('\n')}
-
-CAROUSEL TEXT: "${allSlideText}"
-
-If there is a contradiction, respond with JSON: {"contradiction": true, "detail": "explanation"}
-If no contradiction, respond with JSON: {"contradiction": false}`
-                }]
-            });
-            try {
-                const checkResult = extractJSON((contradictionCheck.content[0] as any).text);
-                if (checkResult.contradiction) {
-                    // Regenerate with stronger constraint - add the contradiction as context
-                    // For now, log the warning. Future: auto-fix the contradicting slide.
-                }
-            } catch { /* ignore parse error on validation check */ }
-        }
-
-        // 5. Append hashtags (no debug message in production)
+        // 4. Append hashtags (no debug message in production)
         let aiDescription = stripEmDashes(result.description || "");
         if (defaultHashtags && defaultHashtags.trim() !== '') {
             aiDescription += `\n\n${defaultHashtags}`;
@@ -1470,7 +1440,7 @@ AVAILABLE IMAGES:
 ${imagesText}`;
 
         const msg = await client.messages.create({
-            model: MODEL,
+            model: HAIKU_MODEL, // Trivial mapping task — Haiku is sufficient
             max_tokens: 1024,
             messages: [{ role: "user", content: matchingPrompt }]
         });
@@ -1700,29 +1670,24 @@ export async function remixCompetitorPost(competitorPostText: string, competitor
             ? `\nNARRATIVE FACTS (NEVER contradict): ${insights.narrativeFacts.join(', ')}`
             : '';
 
+        const remixSystemPrompt = `Tu es un stratège de contenu pour "${authority}" dans la niche "${niche}", ciblant ${targetAudience}.
+LANGUE: FRANÇAIS uniquement. Sonne HUMAIN, pas IA. Écris comme un vrai créateur français.
+INTERDIT: Ne copie aucune phrase de l'original. N'utilise JAMAIS le caractère '→' ni les tirets longs (—/–).
+${narrativeFacts}
+
+Génère 3 hooks REMIXÉS qui: reprennent le MÊME concept viral, l'adaptent à ta persona et audience, sont COMPLÈTEMENT ORIGINAUX.
+JSON UNIQUEMENT: [{"angle":"Concept","hook":"Texte","reason":"Pourquoi ça marche","type":"remix"}]`;
+
         const msg = await client.messages.create({
             model: MODEL,
             max_tokens: 1024,
+            system: [{ type: "text" as const, text: remixSystemPrompt, cache_control: { type: "ephemeral" as const } }],
             messages: [{
                 role: "user",
-                content: `You are a content strategist for "${authority}" in the "${niche}" niche, targeting ${targetAudience}.
-
-A competitor posted this viral content (${competitorViews.toLocaleString()} views):
+                content: `Post viral concurrent (${competitorViews.toLocaleString()} vues):
 "${competitorPostText}"
 
-TASK: Generate 3 REMIXED hooks in FRENCH that:
-1. Take the SAME underlying concept/angle that made this post viral
-2. Adapt it to YOUR persona (${authority}) and YOUR audience (${targetAudience})
-3. Make it COMPLETELY ORIGINAL — different words, different framing, your own voice
-4. Sound HUMAN, not AI-generated. Write like a French creator talks.
-${narrativeFacts}
-
-FORBIDDEN: Do NOT copy phrases from the original. Do NOT use the arrow character '→'.
-
-Return JSON ONLY:
-[
-    { "angle": "Concept (French)", "hook": "Text on screen (French)", "reason": "Why this remix works (French)", "type": "remix" }
-]`
+Génère 3 hooks remixés pour ${authority}.`
             }]
         });
 
@@ -1774,16 +1739,28 @@ export async function scoreCarouselBeforePublish(hookText: string, slides: Slide
             ? `Best patterns: ${insights.bestHookPatterns.map(p => p.pattern).join(', ')}`
             : '';
 
-        const msg = await withRetry(() => client.messages.create({
-            model: MODEL,
-            max_tokens: 1024,
-            messages: [{
-                role: "user",
-                content: `Tu es un analyste de performance TikTok. Évalue ce carrousel AVANT publication.
+        const scoreSystemPrompt = `Tu es un analyste de performance TikTok. Évalue les carrousels AVANT publication.
 IMPORTANT: Dans TOUS les textes (improvements, strengths, formattingIssues), n'utilise JAMAIS de tirets longs (—) ou moyens (–). Utilise uniquement des tirets courts (-), des virgules ou des points.
 LANGUE: Réponds UNIQUEMENT en FRANÇAIS.
 
-HISTORIQUE DES TOP PERFORMERS:
+Évalue sur 6 critères (chaque /20, total /120 puis normalisé à /100):
+1. hookPower (/20): Stoppe le scroll ? Patterns viraux prouvés ?
+2. retentionFlow (/20): Cliffhangers et boucles ouvertes forcent le swipe ?
+3. textQuality (/20): Humain, authentique, pas IA ? Équilibré entre slides ?
+4. valueDensity (/20): Contenu actionnable ?
+5. ctaStrength (/20): Convertit en followers/engagement ?
+6. slideFormatting (/20): Lisibilité TikTok — texte trop long (30+ mots), slides vides (<3 mots), phrases coupées, numérotation orpheline (numéro seul en fin de slide, pas les listes "1. ...").
+
+JSON UNIQUEMENT:
+{"scores":{"hookPower":16,"retentionFlow":14,"textQuality":17,"valueDensity":15,"ctaStrength":12,"slideFormatting":18},"total":74,"prediction":"above_average|average|below_average","estimatedViews":"8000-12000","improvements":["suggestion 1"],"formattingIssues":["Slide 3: issue"],"strengths":["point fort 1"]}`;
+
+        const msg = await withRetry(() => client.messages.create({
+            model: MODEL,
+            max_tokens: 1024,
+            system: [{ type: "text" as const, text: scoreSystemPrompt, cache_control: { type: "ephemeral" as const } }],
+            messages: [{
+                role: "user",
+                content: `HISTORIQUE DES TOP PERFORMERS:
 ${topPostsContext}
 
 Vues moyennes des top posts: ${avgViews.toLocaleString()}
@@ -1791,38 +1768,7 @@ ${insightsContext}
 
 CARROUSEL À ÉVALUER:
 Hook: "${hookText}"
-${allSlideText}
-
-Évalue ce carrousel sur 6 critères (chaque /20, total /120 puis normalisé à /100):
-1. **hookPower** (/20): Est-ce qu'il stoppe le scroll ? Correspond-il aux patterns viraux prouvés ?
-2. **retentionFlow** (/20): Les cliffhangers et boucles ouvertes forcent-ils le swipe ?
-3. **textQuality** (/20): Humain, authentique, pas IA ? Équilibré entre les slides ?
-4. **valueDensity** (/20): L'audience apprend-elle quelque chose d'actionnable ?
-5. **ctaStrength** (/20): Va-t-il convertir en followers/engagement ?
-6. **slideFormatting** (/20): Vérifie CHAQUE slide pour la lisibilité sur une image TikTok:
-   - Texte trop long: une slide avec plus de 30 mots peut être difficile à lire (mineur pour 25-30 mots, majeur pour 30+).
-   - Risque de chevauchement: si deux slides consécutives ont un texte de longueur très similaire ET des mots-clés de positionnement similaires.
-   - Slides vides ou quasi-vides: toute slide avec moins de 3 mots est de l'espace gâché.
-   - Phrases coupées: texte qui commence en milieu de phrase sans contexte (pas un cliffhanger délibéré).
-   - Numérotation orpheline: un numéro comme "2." apparaissant SEUL à la fin d'une slide est une erreur de formatage. Mais les listes numérotées où le numéro commence une slide ("1. Il fait toujours...") sont PARFAITEMENT OK si le hook implique un format liste (ex: "Les 5 signes que...").
-
-Retourne du JSON UNIQUEMENT:
-{
-    "scores": {
-        "hookPower": 16,
-        "retentionFlow": 14,
-        "textQuality": 17,
-        "valueDensity": 15,
-        "ctaStrength": 12,
-        "slideFormatting": 18
-    },
-    "total": 74,
-    "prediction": "above_average" | "average" | "below_average",
-    "estimatedViews": "8000-12000",
-    "improvements": ["suggestion en français 1", "suggestion en français 2"],
-    "formattingIssues": ["Slide 3: contient un numéro parasite '2.' dans le texte", "Slide 5: texte trop long (18 mots)"],
-    "strengths": ["point fort en français 1"]
-}`
+${allSlideText}`
             }]
         }));
 
@@ -1916,19 +1862,31 @@ export async function improveCarouselFromScore(
             .slice(0, 2)
             .map(([k]) => k);
 
-        const msg = await withRetry(() => client.messages.create({
-            model: MODEL,
-            max_tokens: 2048,
-            messages: [{
-                role: "user",
-                content: `Tu es un optimiseur de contenu viral pour "${authority}", ciblant ${targetAudience}.
+        const improveSystemPrompt = `Tu es un optimiseur de contenu viral pour "${authority}", ciblant ${targetAudience}.
 LANGUE: FRANÇAIS uniquement. Tu tutoies. Tu parles comme un vrai créateur français, naturel, direct.
 PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points.
 ${linguisticFingerprint ? `
 ${linguisticFingerprint}
 RÈGLE CRITIQUE: Les améliorations DOIVENT respecter l'empreinte linguistique ci-dessus. Garde les mêmes tics de langage, la même ponctuation, le même registre, la même énergie. Le texte amélioré doit sonner EXACTEMENT comme le créateur, pas comme une IA.` : ''}
 
-CARROUSEL ACTUEL (à améliorer):
+Règles de réécriture:
+- Slide 1 = hook exact (ne pas modifier)
+- Garder le même nombre de slides
+- Ne pas changer les images
+- Sonner HUMAIN, pas IA
+- PRÉSERVER la structure existante (listes numérotées ou flux narratif)
+- Chaque slide = unité complète de sens
+
+JSON UNIQUEMENT (tableau de slides):
+[{"slide_number":1,"text":"hook exact","intention":"Hook"},{"slide_number":2,"text":"texte amélioré","intention":"Tension"}]`;
+
+        const msg = await withRetry(() => client.messages.create({
+            model: MODEL,
+            max_tokens: 2048,
+            system: [{ type: "text" as const, text: improveSystemPrompt, cache_control: { type: "ephemeral" as const } }],
+            messages: [{
+                role: "user",
+                content: `CARROUSEL ACTUEL (à améliorer):
 Hook: "${hookText}"
 ${currentSlidesText}
 
@@ -1940,21 +1898,7 @@ AMÉLIORATIONS SPÉCIFIQUES REQUISES:
 ${improvements.map((imp, i) => `${i + 1}. ${imp}`).join('\n')}
 ${narrativeFacts}
 
-TÂCHE: Réécris les slides du carrousel en appliquant TOUTES les améliorations ci-dessus. Règles:
-- Garde la slide 1 avec le MÊME texte exact du hook: "${hookText}"
-- Garde le même nombre de slides (${currentSlides.length})
-- Ne change PAS les images (image_id, image_url)
-- Concentre-toi sur les POINTS FAIBLES: ${weakest.join(', ')}
-- Sonne HUMAIN, pas IA. Écris en FRANÇAIS comme le créateur parle.
-- PRÉSERVE la structure existante: si les slides utilisent des listes numérotées (1., 2., 3.), garde ce format. Si c'est un flux narratif, garde ce flux.
-- Chaque slide doit être une unité complète de sens.
-
-Retourne du JSON UNIQUEMENT (tableau de slides):
-[
-    { "slide_number": 1, "text": "${hookText}", "intention": "Hook" },
-    { "slide_number": 2, "text": "texte amélioré ici", "intention": "Tension" },
-    ...
-]`
+Réécris les slides en appliquant TOUTES les améliorations. Concentre-toi sur: ${weakest.join(', ')}. Garde ${currentSlides.length} slides, hook exact: "${hookText}".`
             }]
         }));
 
@@ -2152,7 +2096,7 @@ export async function generateVariations(seedHook: HookProposal) {
         const msg = await anthropic.messages.create({
             model: MODEL,
             max_tokens: 1024,
-            system: systemPrompt,
+            system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
             messages: [{ role: "user", content: "Generate 3 variations." }]
         });
 
