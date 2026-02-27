@@ -90,8 +90,11 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             outlineColor: layer.outlineColor,
             outlineWidth: layer.outlineWidth,
             lineHeight: layer.lineHeight,
+            letterSpacing: layer.letterSpacing,
             textMode: layer.textMode,
+            textDecoration: layer.textDecoration,
             backgroundColor: layer.backgroundColor,
+            maxWidth: layer.maxWidth,
         };
         const res = await saveDefaultFontSettings(settings);
         if (res.success) {
@@ -346,10 +349,12 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             textAlign: d?.textAlign ?? 'center',
             color: d?.color ?? '#ffffff',
             outlineColor: d?.outlineColor ?? '#000000',
-            outlineWidth: d?.outlineWidth ?? 2,
+            outlineWidth: d?.outlineWidth ?? 1.5,
             lineHeight: d?.lineHeight ?? 1.5,
-            maxWidth: 300,
+            letterSpacing: d?.letterSpacing,
+            maxWidth: d?.maxWidth ?? 300,
             textMode: (d?.textMode as any) ?? 'outline',
+            textDecoration: d?.textDecoration,
             backgroundColor: d?.backgroundColor,
         };
         updateSlide({ layers: [...activeSlide.layers, newLayer] });
@@ -473,13 +478,9 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
     // ============================================
     // Export — uses native Canvas 2D to preserve original image dimensions
     // ============================================
-    const exportSlides = async () => {
-        setIsExporting(true);
-        toast.info("Export en cours...");
-        try {
-            for (let i = 0; i < slides.length; i++) {
-                const slide = slides[i];
 
+    // Render a single slide to a Blob (reused by exportSlides and exportSingleSlide)
+    const renderSlideToBlob = async (slide: EditorSlide): Promise<Blob | null> => {
                 // Load background image to get its native dimensions
                 let bgImg: HTMLImageElement | null = null;
                 if (slide.backgroundImage?.imageUrl) {
@@ -725,7 +726,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     }
 
                     const textMode = tl.textMode || 'outline';
-                    const outlineW = Math.round((tl.outlineWidth || 2) * scaleX);
+                    const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
 
                     // Caption mode: add gap between line boxes (matches preview gap: 4px)
                     const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
@@ -791,6 +792,32 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 }
 
                 const blob = await new Promise<Blob | null>(r => canvas.toBlob(r, 'image/png'));
+                return blob;
+    };
+
+    // Export a single slide by index
+    const exportSingleSlide = async (slideIndex: number) => {
+        setIsExporting(true);
+        try {
+            const slide = slides[slideIndex];
+            const blob = await renderSlideToBlob(slide);
+            if (blob) saveAs(blob, `slide-${slideIndex + 1}.png`);
+            toast.success(`Slide ${slideIndex + 1} exportée !`);
+        } catch (error) {
+            console.error('Export error:', error);
+            toast.error("Erreur lors de l'export");
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    // Export all slides
+    const exportSlides = async () => {
+        setIsExporting(true);
+        toast.info("Export en cours...");
+        try {
+            for (let i = 0; i < slides.length; i++) {
+                const blob = await renderSlideToBlob(slides[i]);
                 if (blob) saveAs(blob, `slide-${i + 1}.png`);
                 if (i < slides.length - 1) await new Promise(r => setTimeout(r, 200));
             }
@@ -876,11 +903,20 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                                 </div>
                             </div>
                             {/* Slide actions — visible on hover (desktop) and always on active slide (mobile) */}
-                            {slides.length > 1 && (
-                                <div className={cn(
-                                    "absolute -top-2 -right-2 z-10 transition-opacity",
-                                    idx === activeSlideIndex ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                )}>
+                            <div className={cn(
+                                "absolute -top-2 -right-2 z-10 transition-opacity flex gap-0.5",
+                                idx === activeSlideIndex ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            )}>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); exportSingleSlide(idx); }}
+                                    disabled={isExporting}
+                                    className="w-5 h-5 sm:w-6 sm:h-6 bg-primary hover:bg-primary/80 disabled:opacity-50 rounded-full flex items-center justify-center shadow-lg transition-colors"
+                                    title={`Télécharger slide ${idx + 1}`}
+                                    aria-label={`Télécharger slide ${idx + 1}`}
+                                >
+                                    <Download className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
+                                </button>
+                                {slides.length > 1 && (
                                     <button
                                         onClick={(e) => { e.stopPropagation(); deleteSlide(idx); }}
                                         className="w-5 h-5 sm:w-6 sm:h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center shadow-lg transition-colors"
@@ -889,8 +925,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                                     >
                                         <Trash2 className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
                                     </button>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     ))}
                     {/* Add Slide button */}

@@ -210,7 +210,7 @@ export function MobileToolbar({
                                     const next = modes[(idx + 1) % modes.length];
                                     const updates: Partial<TextLayer> = { textMode: next };
                                     if (next === 'outline') {
-                                        updates.outlineWidth = selectedLayer.outlineWidth || 2;
+                                        updates.outlineWidth = selectedLayer.outlineWidth || 1.5;
                                         updates.outlineColor = selectedLayer.outlineColor || '#000000';
                                     } else if (next === 'box') {
                                         updates.outlineWidth = 0;
@@ -451,7 +451,7 @@ function TextStyleSheet({ layer, onUpdate }: { layer: TextLayer; onUpdate: (u: P
                             min={0}
                             max={10}
                             step={0.5}
-                            value={layer.outlineWidth || 2}
+                            value={layer.outlineWidth || 1.5}
                             onChange={(e) => onUpdate({ outlineWidth: parseFloat(e.target.value) })}
                             className="w-full accent-primary h-1.5"
                         />

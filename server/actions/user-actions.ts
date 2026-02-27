@@ -143,8 +143,11 @@ export interface DefaultFontSettings {
     outlineColor?: string;
     outlineWidth?: number;
     lineHeight?: number;
+    letterSpacing?: number;
     textMode?: string;
+    textDecoration?: 'none' | 'underline' | 'line-through';
     backgroundColor?: string;
+    maxWidth?: number;
 }
 
 export async function getDefaultFontSettings(): Promise<{ success?: boolean; error?: string; settings?: DefaultFontSettings | null }> {
