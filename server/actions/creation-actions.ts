@@ -143,7 +143,7 @@ export type Slide = {
 // Extracts the creator's writing style from their posts (used by both generation and optimization)
 function computeLinguisticFingerprint(
     topPosts: { post: { hookText: string | null; description: string | null; slides: string | null }; views: number }[],
-    existingPosts: { slides: string | null; hookText: string | null }[]
+    existingPosts: { slides: string | null; hookText: string | null; description?: string | null }[]
 ): string {
     const allCreatorTexts: string[] = [];
     const allDescriptions: string[] = [];
@@ -164,6 +164,7 @@ function computeLinguisticFingerprint(
             s.forEach(slide => { if (slide.text) allCreatorTexts.push(slide.text); });
         } catch { /* skip */ }
         if (p.hookText) allHooks.push(p.hookText);
+        if (p.description) allDescriptions.push(p.description);
     });
 
     if (allCreatorTexts.length < 5) return '';
@@ -320,6 +321,72 @@ function computeLinguisticFingerprint(
     return fp;
 }
 
+// Shared helper: compute hook-specific fingerprint from a list of hook texts
+function computeHookFingerprint(allHookTexts: string[]): string {
+    if (allHookTexts.length < 3) return '';
+
+    const allJoined = allHookTexts.join(' ');
+
+    // Emoji analysis
+    const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
+    const emojis = allJoined.match(emojiRegex) || [];
+    const usesEmojis = emojis.length > 0;
+    const emojiFreq: Record<string, number> = {};
+    emojis.forEach(e => { emojiFreq[e] = (emojiFreq[e] || 0) + 1; });
+    const topEmojis = Object.entries(emojiFreq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([e]) => e);
+
+    // Caps analysis
+    const allCapsWords = (allJoined.match(/\b[A-ZÀ-Ü]{2,}\b/g) || []);
+    const usesAllCaps = allCapsWords.length > 1;
+
+    // Punctuation
+    const ellipsis = (allJoined.match(/\.\.\./g) || []).length;
+    const questions = (allJoined.match(/\?/g) || []).length;
+    const exclamations = (allJoined.match(/!/g) || []).length;
+
+    // Tutoiement
+    const tuCount = (allJoined.match(/\b(tu|t'|toi|ton|ta|tes)\b/gi) || []).length;
+
+    // Tics in hooks
+    const ticsPatterns = [
+        { p: /\ben fait\b/gi, l: 'en fait' }, { p: /\bgenre\b/gi, l: 'genre' },
+        { p: /\bdu coup\b/gi, l: 'du coup' }, { p: /\bvraiment\b/gi, l: 'vraiment' },
+        { p: /\bjuste\b/gi, l: 'juste' }, { p: /\btrop\b/gi, l: 'trop' },
+        { p: /\bperso\b/gi, l: 'perso' }, { p: /\bsérieux\b/gi, l: 'sérieux' },
+    ];
+    const tics = ticsPatterns
+        .map(t => ({ label: t.l, count: (allJoined.match(t.p) || []).length }))
+        .filter(t => t.count >= 2)
+        .sort((a, b) => b.count - a.count);
+
+    let fp = `\nEMPREINTE LINGUISTIQUE DES HOOKS (${allHookTexts.length} hooks analysés):\n`;
+    fp += `  Ponctuation: "..." ${ellipsis}x | "?" ${questions}x | "!" ${exclamations}x | Tutoiement: ${tuCount}x\n`;
+    if (usesEmojis) {
+        fp += `  Émojis: OUI — favoris: ${topEmojis.join(' ')} → UTILISE-LES dans les hooks\n`;
+    } else {
+        fp += `  Émojis: NON — n'ajoute PAS d'émojis dans les hooks\n`;
+    }
+    if (usesAllCaps) {
+        fp += `  Majuscules: OUI — pour l'emphase (ex: ${[...new Set(allCapsWords)].slice(0, 5).join(', ')})\n`;
+    }
+    if (tics.length > 0) {
+        fp += `  Tics de langage: ${tics.map(t => `"${t.label}" (${t.count}x)`).join(', ')} → INTÈGRE-LES naturellement\n`;
+    }
+
+    return fp;
+}
+
+// Shared helper: fetch hook texts for a profile (used by hook generation functions)
+async function fetchHookTextsForProfile(profileId: string): Promise<string[]> {
+    const posts = await prisma.post.findMany({
+        where: { profileId, status: { notIn: ['rejected', 'idea'] } },
+        select: { hookText: true },
+        orderBy: { createdAt: 'desc' },
+        take: 50
+    });
+    return posts.map(p => p.hookText || '').filter(h => h.length > 0);
+}
+
 export async function generateHooks() {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };
@@ -439,61 +506,7 @@ CRITIQUE: Tout hook qui ressemble, paraphrase ou réutilise le même concept est
         return parts.length > 0 ? `\n📊 INTELLIGENCE (basé sur ${insights.metadata?.basedOnPostsCount || 0} posts analysés):\n${parts.join('\n')}` : '';
     })();
 
-    // Linguistic fingerprint for hooks — analyze the creator's hook writing style
-    const hookFingerprint = (() => {
-        const allHookTexts = recentMetrics.map(m => m.post.hookText || '').filter(h => h.length > 0);
-        if (allHookTexts.length < 3) return '';
-
-        const allJoined = allHookTexts.join(' ');
-
-        // Emoji analysis
-        const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
-        const emojis = allJoined.match(emojiRegex) || [];
-        const usesEmojis = emojis.length > 0;
-        const emojiFreq: Record<string, number> = {};
-        emojis.forEach(e => { emojiFreq[e] = (emojiFreq[e] || 0) + 1; });
-        const topEmojis = Object.entries(emojiFreq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([e]) => e);
-
-        // Caps analysis
-        const allCapsWords = (allJoined.match(/\b[A-ZÀ-Ü]{2,}\b/g) || []);
-        const usesAllCaps = allCapsWords.length > 1;
-
-        // Punctuation
-        const ellipsis = (allJoined.match(/\.\.\./g) || []).length;
-        const questions = (allJoined.match(/\?/g) || []).length;
-        const exclamations = (allJoined.match(/!/g) || []).length;
-
-        // Tutoiement
-        const tuCount = (allJoined.match(/\b(tu|t'|toi|ton|ta|tes)\b/gi) || []).length;
-
-        // Tics in hooks
-        const ticsPatterns = [
-            { p: /\ben fait\b/gi, l: 'en fait' }, { p: /\bgenre\b/gi, l: 'genre' },
-            { p: /\bdu coup\b/gi, l: 'du coup' }, { p: /\bvraiment\b/gi, l: 'vraiment' },
-            { p: /\bjuste\b/gi, l: 'juste' }, { p: /\btrop\b/gi, l: 'trop' },
-            { p: /\bperso\b/gi, l: 'perso' }, { p: /\bsérieux\b/gi, l: 'sérieux' },
-        ];
-        const tics = ticsPatterns
-            .map(t => ({ label: t.l, count: (allJoined.match(t.p) || []).length }))
-            .filter(t => t.count >= 2)
-            .sort((a, b) => b.count - a.count);
-
-        let fp = `\n🔍 EMPREINTE LINGUISTIQUE DE TES HOOKS (${allHookTexts.length} hooks analysés):\n`;
-        fp += `  Ponctuation: "..." ${ellipsis}x | "?" ${questions}x | "!" ${exclamations}x | Tutoiement: ${tuCount}x\n`;
-        if (usesEmojis) {
-            fp += `  Émojis: OUI — favoris: ${topEmojis.join(' ')} → UTILISE-LES dans les hooks\n`;
-        } else {
-            fp += `  Émojis: NON — n'ajoute PAS d'émojis dans les hooks\n`;
-        }
-        if (usesAllCaps) {
-            fp += `  Majuscules: OUI — pour l'emphase (ex: ${[...new Set(allCapsWords)].slice(0, 5).join(', ')})\n`;
-        }
-        if (tics.length > 0) {
-            fp += `  Tics de langage: ${tics.map(t => `"${t.label}" (${t.count}x)`).join(', ')} → INTÈGRE-LES naturellement\n`;
-        }
-
-        return fp;
-    })();
+    const hookFingerprint = computeHookFingerprint(recentMetrics.map(m => m.post.hookText || '').filter(h => h.length > 0));
 
 
     const systemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle — tu ES cette personne. Tu crées du contenu dans la niche "${niche}" et chaque hook que tu écris doit sonner exactement comme toi.
@@ -689,7 +702,12 @@ export async function generateReplacementHook(rejectedHook: HookProposal) {
         ? `\nPATTERNS QUI FONCTIONNENT: ${insights.bestHookPatterns.map((p: any) => p.pattern).join(', ')}`
         : '';
 
+    // Fetch hook fingerprint so replacements match creator's writing style
+    const hookTexts = await fetchHookTextsForProfile(activeProfileId);
+    const hookFingerprint = computeHookFingerprint(hookTexts);
+
     const systemPrompt = `Tu es ${authority}. Tu parles à ${targetAudience}.${niche ? ` Ta niche: ${niche}.` : ''}
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Tirets courts (-) uniquement.
 
 Le créateur a REJETÉ ce hook : "${rejectedHook.hook}" (Angle: ${rejectedHook.angle})
 
@@ -698,6 +716,8 @@ ${blacklist || '(aucun)'}
 ${rejectedAnglesList}
 ${wildcardInstruction}
 ${insightsContext}
+${hookFingerprint}
+${hookFingerprint ? `RÈGLE CRITIQUE: Le hook DOIT respecter l'empreinte linguistique ci-dessus. Même ponctuation, mêmes émojis (ou absence), mêmes tics, même registre.` : ''}
 
 RÈGLES :
 - Génère 1 SEUL nouveau hook viral en FRANÇAIS.
@@ -777,16 +797,16 @@ export async function generateCarousel(hook: string, collectionId?: string, user
             orderBy: { views: 'desc' },
             include: { post: true }
         }),
-        // Fetch slide texts from recent posts to enforce uniqueness
+        // Fetch slide texts from recent posts for uniqueness + linguistic fingerprint
         prisma.post.findMany({
             where: {
                 profileId: activeProfileId,
-                status: { in: ['created', 'draft'] },
+                status: { notIn: ['rejected', 'idea'] },
                 slides: { not: '[]' }
             },
             orderBy: { createdAt: 'desc' },
             take: 30,
-            select: { slides: true, hookText: true, createdAt: true }
+            select: { slides: true, hookText: true, description: true, createdAt: true }
         }),
         // Fetch narrative insights for consistency
         getCachedInsights(activeProfileId, userApiKey).catch(() => null)
@@ -1440,7 +1460,7 @@ AVAILABLE IMAGES:
 ${imagesText}`;
 
         const msg = await client.messages.create({
-            model: HAIKU_MODEL, // Trivial mapping task — Haiku is sufficient
+            model: MODEL, // Sonnet required for quality image-slide semantic matching
             max_tokens: 1024,
             messages: [{ role: "user", content: matchingPrompt }]
         });
@@ -1670,10 +1690,16 @@ export async function remixCompetitorPost(competitorPostText: string, competitor
             ? `\nNARRATIVE FACTS (NEVER contradict): ${insights.narrativeFacts.join(', ')}`
             : '';
 
+        // Fetch hook fingerprint so remixes match creator's writing style
+        const hookTexts = await fetchHookTextsForProfile(activeProfileId);
+        const hookFingerprint = computeHookFingerprint(hookTexts);
+
         const remixSystemPrompt = `Tu es un stratège de contenu pour "${authority}" dans la niche "${niche}", ciblant ${targetAudience}.
 LANGUE: FRANÇAIS uniquement. Sonne HUMAIN, pas IA. Écris comme un vrai créateur français.
 INTERDIT: Ne copie aucune phrase de l'original. N'utilise JAMAIS le caractère '→' ni les tirets longs (—/–).
 ${narrativeFacts}
+${hookFingerprint}
+${hookFingerprint ? `RÈGLE CRITIQUE: Les hooks remixés DOIVENT respecter l'empreinte linguistique ci-dessus. Même ponctuation, mêmes émojis (ou absence), mêmes tics de langage, même registre. Les hooks doivent sonner comme le CRÉATEUR, pas comme le concurrent.` : ''}
 
 Génère 3 hooks REMIXÉS qui: reprennent le MÊME concept viral, l'adaptent à ta persona et audience, sont COMPLÈTEMENT ORIGINAUX.
 JSON UNIQUEMENT: [{"angle":"Concept","hook":"Texte","reason":"Pourquoi ça marche","type":"remix"}]`;
@@ -1828,11 +1854,11 @@ export async function improveCarouselFromScore(
                 orderBy: { views: 'desc' },
                 include: { post: true }
             }),
-            // Fetch recent posts for more style data
+            // Fetch recent posts for more style data (include published for full fingerprint)
             prisma.post.findMany({
                 where: {
                     profileId: activeProfileId,
-                    status: { in: ['created', 'draft'] },
+                    status: { notIn: ['rejected', 'idea'] },
                     slides: { not: '[]' }
                 },
                 orderBy: { createdAt: 'desc' },
@@ -2042,53 +2068,43 @@ export async function generateVariations(seedHook: HookProposal) {
     const activeProfileId = await getActiveProfileId(session.user.id);
     if (!activeProfileId) return { error: 'No active profile found' };
 
-    const profile = await prisma.profile.findUnique({ where: { id: activeProfileId } });
+    const [profile, insights, hookTexts] = await Promise.all([
+        prisma.profile.findUnique({ where: { id: activeProfileId } }),
+        getCachedInsights(activeProfileId, '').catch(() => null),
+        fetchHookTextsForProfile(activeProfileId)
+    ]);
 
     const authority = profile?.persona || "Expert Creator";
     const targetAudience = (profile as any)?.targetAudience || "General Audience";
     const niche = (profile as any)?.niche || "General Content";
-    const tone = "Authentic, engaging, and direct (French Language)";
 
-    const systemPrompt = `
-    You are an advanced AI Content Strategist.
-    
-    OBJECTIVE:
-    Generate 3 NEW viral hook variations based on a specific "seed" concept.
-    
-    SEED CONCEPT:
-    - Angle: "${seedHook.angle}"
-    - Hook: "${seedHook.hook}"
-    - Why it works: "${seedHook.reason}"
-    
-    LANGUAGE: 
-    FRENCH (Français) ONLY. All output must be in perfect French.
-    
-    PERSONA & AUDIENCE:
-    - Authority: ${authority}
-    - Niche: ${niche}
-    - Target: ${targetAudience}
-    - Tone: ${tone}
-    
-    TASK:
-    Create 3 variations that explore this SAME concept but with different framings:
-    1. Variation 1: More controversial/bold.
-    2. Variation 2: More curiosity-driven (Gap Theory).
-    3. Variation 3: A direct benefit/outcome focus.
-    
-    CONSTRAINTS:
-    - FORBIDDEN: Do NOT use the arrow character '→'.
-    - Keep it short and punchy.
-    
-    OUTPUT FORMAT (JSON Only):
-    [
-        {
-            "angle": "Variation Name",
-            "hook": "The actual text",
-            "reason": "How this varies from the seed.",
-            "type": "optimized"
-        }
-    ]
-    `;
+    const hookFingerprint = computeHookFingerprint(hookTexts);
+    const narrativeFacts = insights?.narrativeFacts?.length
+        ? `\nFAITS NARRATIFS (NE JAMAIS CONTREDIRE): ${insights.narrativeFacts.join(', ')}`
+        : '';
+
+    const systemPrompt = `Tu es ${authority}. Tu crées du contenu dans la niche "${niche}" pour ${targetAudience}.
+LANGUE: FRANÇAIS natif uniquement. Tu tutoies. Direct, naturel, avec du punch.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—/–). Tirets courts (-) uniquement.
+INTERDIT: le caractère '→'.
+${narrativeFacts}
+
+CONCEPT DE BASE:
+- Angle: "${seedHook.angle}"
+- Hook: "${seedHook.hook}"
+- Pourquoi ça marche: "${seedHook.reason}"
+${hookFingerprint}
+${hookFingerprint ? `RÈGLE CRITIQUE: Les variations DOIVENT respecter l'empreinte linguistique ci-dessus. Même ponctuation, mêmes émojis (ou absence), mêmes tics de langage, même registre. Les hooks doivent sonner comme le CRÉATEUR.` : ''}
+
+Crée 3 variations qui explorent le MÊME concept avec des cadrages différents:
+1. Plus controversé/provocateur.
+2. Plus axé curiosité (Gap Theory).
+3. Focus bénéfice/résultat direct.
+
+Max 70 caractères par hook. Court et percutant.
+
+JSON UNIQUEMENT:
+[{"angle":"Nom variation","hook":"Texte du hook","reason":"En quoi c'est différent du seed","type":"optimized"}]`;
 
     try {
         const { client: anthropic } = await getAnthropicClient(session.user.id);
@@ -2097,7 +2113,7 @@ export async function generateVariations(seedHook: HookProposal) {
             model: MODEL,
             max_tokens: 1024,
             system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
-            messages: [{ role: "user", content: "Generate 3 variations." }]
+            messages: [{ role: "user", content: "Génère 3 variations virales de ce hook." }]
         });
 
         const text = (msg.content[0] as any).text;
