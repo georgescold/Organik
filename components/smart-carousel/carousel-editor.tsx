@@ -494,9 +494,31 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     }).catch(() => null);
                 }
 
-                // Use image's native dimensions — no forced 9:16
-                const W = bgImg ? bgImg.naturalWidth : 1080;
-                const H = bgImg ? bgImg.naturalHeight : 1920;
+                // Parse CSS objectPosition keyword to fractional offsets (0-1)
+                const parseObjPos = (pos: string | undefined): [number, number] => {
+                    if (!pos) return [0.5, 0.5];
+                    const kw: Record<string, number> = { left: 0, center: 0.5, right: 1, top: 0, bottom: 1 };
+                    const parts = pos.trim().split(/\s+/);
+                    if (parts.length === 1) {
+                        const v = kw[parts[0]];
+                        if (parts[0] === 'top' || parts[0] === 'bottom') return [0.5, v];
+                        return [v ?? 0.5, 0.5];
+                    }
+                    let x = 0.5, y = 0.5;
+                    for (const p of parts) {
+                        if (p === 'left') x = 0;
+                        else if (p === 'right') x = 1;
+                        else if (p === 'top') y = 0;
+                        else if (p === 'bottom') y = 1;
+                    }
+                    return [x, y];
+                };
+
+                // Export at preview aspect ratio so framing matches what user sees in editor.
+                // Use the image's natural width (min 1080) for high resolution.
+                const previewRatio = canvasH / canvasW;
+                const W = Math.max(bgImg ? bgImg.naturalWidth : 1080, 1080);
+                const H = Math.round(W * previewRatio);
 
                 const canvas = document.createElement('canvas');
                 canvas.width = W;
@@ -509,7 +531,8 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                 ctx.fillStyle = slide.backgroundColor || '#000';
                 ctx.fillRect(0, 0, W, H);
 
-                // Draw background image with filters and scale (matches editor preview)
+                // Draw background image with objectFit, objectPosition, filters, and scale
+                // (matches editor preview's CSS rendering exactly)
                 if (bgImg) {
                     ctx.save();
 
@@ -520,7 +543,6 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         if (f.brightness !== 100) fp.push(`brightness(${f.brightness}%)`);
                         if (f.contrast !== 100) fp.push(`contrast(${f.contrast}%)`);
                         if (f.blur > 0) {
-                            // Scale blur proportionally to export resolution
                             const exportBlur = Math.round(f.blur * (W / canvasW));
                             fp.push(`blur(${exportBlur}px)`);
                         }
@@ -530,15 +552,53 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                         if (fp.length > 0) ctx.filter = fp.join(' ');
                     }
 
-                    // Apply zoom/scale (centered, matching editor's transform: scale())
+                    const objFit = slide.backgroundImage?.objectFit || 'cover';
+                    const objPos = slide.backgroundImage?.objectPosition || 'center';
                     const bgScale = slide.backgroundImage?.scale || 1;
+                    const [fracX, fracY] = parseObjPos(objPos);
+
+                    // Apply zoom/scale from objectPosition origin
+                    // (matches preview's CSS transform: scale() + transformOrigin: objectPosition)
                     if (bgScale !== 1) {
-                        const drawW = W * bgScale;
-                        const drawH = H * bgScale;
-                        const drawX = (W - drawW) / 2;
-                        const drawY = (H - drawH) / 2;
-                        ctx.drawImage(bgImg, drawX, drawY, drawW, drawH);
+                        ctx.translate(W * fracX, H * fracY);
+                        ctx.scale(bgScale, bgScale);
+                        ctx.translate(-W * fracX, -H * fracY);
+                    }
+
+                    // Draw image with objectFit logic (matches preview's CSS objectFit/objectPosition)
+                    if (objFit === 'cover') {
+                        const imgW = bgImg.naturalWidth;
+                        const imgH = bgImg.naturalHeight;
+                        const canvasRatio = W / H;
+                        const imgRatio = imgW / imgH;
+                        let sx: number, sy: number, sw: number, sh: number;
+                        if (imgRatio > canvasRatio) {
+                            // Image wider than canvas → crop sides
+                            sh = imgH;
+                            sw = imgH * canvasRatio;
+                        } else {
+                            // Image taller than canvas → crop top/bottom
+                            sw = imgW;
+                            sh = imgW / canvasRatio;
+                        }
+                        // objectPosition controls which part of the image is visible
+                        sx = (imgW - sw) * fracX;
+                        sy = (imgH - sh) * fracY;
+                        ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, W, H);
+                    } else if (objFit === 'contain') {
+                        const imgRatio = bgImg.naturalWidth / bgImg.naturalHeight;
+                        const canvasRatio = W / H;
+                        let dw: number, dh: number, dx: number, dy: number;
+                        if (imgRatio > canvasRatio) {
+                            dw = W; dh = W / imgRatio;
+                        } else {
+                            dh = H; dw = H * imgRatio;
+                        }
+                        dx = (W - dw) / 2;
+                        dy = (H - dh) / 2;
+                        ctx.drawImage(bgImg, dx, dy, dw, dh);
                     } else {
+                        // 'fill' — stretch to fit canvas
                         ctx.drawImage(bgImg, 0, 0, W, H);
                     }
 
