@@ -35,6 +35,10 @@ export const authConfig = {
         },
     },
     providers: [], // Configured in auth.ts
-    session: { strategy: "jwt" },
+    session: {
+        strategy: "jwt",
+        maxAge: 30 * 24 * 60 * 60,   // 30 days — absolute token lifetime
+        updateAge: 24 * 60 * 60,     // Refresh token every 24h (sliding window)
+    },
     secret: process.env.AUTH_SECRET,
 } satisfies NextAuthConfig;

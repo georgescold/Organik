@@ -16,7 +16,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ForceSignOut } from "@/components/auth/force-signout";
 import { RocketIcon } from '@/components/ui/rocket-icon';
 
 const montserrat = Montserrat({ subsets: ["latin"], weight: ["400", "700", "900"] });

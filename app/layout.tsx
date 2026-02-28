@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 import { Toaster } from "@/components/ui/sonner";
 import { HomeButton } from "@/components/ui/home-button";
 import { TwemojiProvider } from "@/components/twemoji-provider";
+import { AuthSessionProvider } from "@/components/providers/session-provider";
 
 export const metadata: Metadata = {
   title: "Organik | TikTok Content Manager",
@@ -48,17 +49,19 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground min-h-screen pb-20 sm:pb-24`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          themes={["dark", "white", "beige"]}
-          disableTransitionOnChange
-        >
-          {children}
-          <HomeButton />
-          <Toaster />
-          <TwemojiProvider />
-        </ThemeProvider>
+        <AuthSessionProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            themes={["dark", "white", "beige"]}
+            disableTransitionOnChange
+          >
+            {children}
+            <HomeButton />
+            <Toaster />
+            <TwemojiProvider />
+          </ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );
