@@ -18,7 +18,6 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
     const [showBibleGuide, setShowBibleGuide] = useState(false);
     const [formData, setFormData] = useState({
         productName: panel.productName || '',
-        productDescription: panel.productDescription || '',
         productUrl: panel.productUrl || '',
         targetAudience: panel.targetAudience || '',
         positioning: panel.positioning || '',
@@ -42,7 +41,7 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
 
     return (
         <div className="space-y-6">
-            {/* Product card */}
+            {/* Product Identity card */}
             <div className="bg-card border-2 border-border rounded-xl overflow-hidden">
                 <div className="h-1 bg-gradient-to-r from-primary/60 via-primary to-primary/60" />
                 <div className="p-5 sm:p-8 space-y-6">
@@ -51,8 +50,8 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
                             <Package className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                            <h2 className="text-xl font-black">Définition du Produit</h2>
-                            <p className="text-sm text-muted-foreground">Décrivez précisément votre produit pour piloter l'acquisition</p>
+                            <h2 className="text-xl font-black">Identité Produit</h2>
+                            <p className="text-sm text-muted-foreground">Informations de base sur votre produit</p>
                         </div>
                     </div>
 
@@ -86,53 +85,36 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
                         </div>
                     </div>
 
-                    {/* Description */}
-                    <div className="space-y-2">
-                        <Label htmlFor="productDescription" className="text-sm font-bold flex items-center gap-2">
-                            <Package className="h-3.5 w-3.5" />
-                            Description Complète
-                        </Label>
-                        <Textarea
-                            id="productDescription"
-                            value={formData.productDescription}
-                            onChange={(e) => updateField('productDescription', e.target.value)}
-                            placeholder="Décrivez votre produit en détail : fonctionnalités, avantages, prix, différenciateurs..."
-                            rows={5}
-                            className="resize-y"
-                        />
-                        <p className="text-xs text-muted-foreground">Plus la description est détaillée, meilleures seront les suggestions d'acquisition.</p>
-                    </div>
-
-                    {/* Target audience */}
-                    <div className="space-y-2">
-                        <Label htmlFor="targetAudience" className="text-sm font-bold flex items-center gap-2">
-                            <Users className="h-3.5 w-3.5" />
-                            Audience Cible
-                        </Label>
-                        <Textarea
-                            id="targetAudience"
-                            value={formData.targetAudience}
-                            onChange={(e) => updateField('targetAudience', e.target.value)}
-                            placeholder="Qui sont vos clients idéaux ? Démographie, intérêts, pain points, comportement d'achat..."
-                            rows={4}
-                            className="resize-y"
-                        />
-                    </div>
-
-                    {/* Positioning */}
-                    <div className="space-y-2">
-                        <Label htmlFor="positioning" className="text-sm font-bold flex items-center gap-2">
-                            <Target className="h-3.5 w-3.5" />
-                            Positionnement
-                        </Label>
-                        <Textarea
-                            id="positioning"
-                            value={formData.positioning}
-                            onChange={(e) => updateField('positioning', e.target.value)}
-                            placeholder="Comment vous positionnez-vous vs la concurrence ? Quelle est votre proposition de valeur unique ?"
-                            rows={4}
-                            className="resize-y"
-                        />
+                    {/* Target audience + Positioning row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="targetAudience" className="text-sm font-bold flex items-center gap-2">
+                                <Users className="h-3.5 w-3.5" />
+                                Audience Cible
+                            </Label>
+                            <Textarea
+                                id="targetAudience"
+                                value={formData.targetAudience}
+                                onChange={(e) => updateField('targetAudience', e.target.value)}
+                                placeholder="Qui sont vos clients idéaux ? Démographie, intérêts, pain points..."
+                                rows={3}
+                                className="resize-y"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="positioning" className="text-sm font-bold flex items-center gap-2">
+                                <Target className="h-3.5 w-3.5" />
+                                Positionnement
+                            </Label>
+                            <Textarea
+                                id="positioning"
+                                value={formData.positioning}
+                                onChange={(e) => updateField('positioning', e.target.value)}
+                                placeholder="Proposition de valeur unique, différenciation vs concurrence..."
+                                rows={3}
+                                className="resize-y"
+                            />
+                        </div>
                     </div>
 
                     {/* Save button */}
@@ -152,35 +134,35 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
 
             {/* Product Bible card */}
             <div className="bg-card border-2 border-border rounded-xl overflow-hidden">
-                <div className="h-1 bg-gradient-to-r from-amber-500/60 via-amber-500 to-amber-500/60" />
+                <div className="h-1 bg-gradient-to-r from-violet-500/60 via-violet-500 to-violet-500/60" />
                 <div className="p-5 sm:p-8 space-y-6">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                            <BookOpen className="h-5 w-5 text-amber-500" />
+                        <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                            <BookOpen className="h-5 w-5 text-violet-500" />
                         </div>
                         <div className="flex-1">
                             <h2 className="text-xl font-black">Product Bible</h2>
-                            <p className="text-sm text-muted-foreground">Base de connaissances complète de votre produit pour le placement subtil dans les posts</p>
+                            <p className="text-sm text-muted-foreground">Base de connaissances complète pour le placement subtil dans vos posts</p>
                         </div>
                     </div>
 
                     {/* Guide toggle */}
                     <button
                         onClick={() => setShowBibleGuide(!showBibleGuide)}
-                        className="flex items-center gap-2 text-sm font-bold text-amber-600 hover:text-amber-500 transition-colors"
+                        className="flex items-center gap-2 text-sm font-bold text-violet-500 hover:text-violet-400 transition-colors"
                     >
                         {showBibleGuide ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                         {showBibleGuide ? 'Masquer le guide' : 'Comment rédiger votre Product Bible ?'}
                     </button>
 
                     {showBibleGuide && (
-                        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 sm:p-6 text-sm space-y-4">
-                            <p className="font-bold text-amber-600">Le Product Bible permet à Organik de comprendre en profondeur votre produit pour le mentionner de façon naturelle et pertinente dans vos posts.</p>
+                        <div className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-4 sm:p-6 text-sm space-y-4">
+                            <p className="font-bold text-violet-400">Le Product Bible est le document central qui permet à Organik de comprendre en profondeur votre produit. C'est ici que vous décrivez tout : fonctionnalités, vocabulaire, angles de placement. Plus c'est complet, plus les mentions seront naturelles.</p>
 
                             <div className="space-y-3">
                                 <div>
                                     <p className="font-bold">1. Identité du produit</p>
-                                    <p className="text-muted-foreground">Nom, concept en une phrase, URL, proposition de valeur unique</p>
+                                    <p className="text-muted-foreground">Concept en une phrase, proposition de valeur unique, ce qui le rend spécial</p>
                                 </div>
                                 <div>
                                     <p className="font-bold">2. Fonctionnalités / Offres détaillées</p>
@@ -192,7 +174,7 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
                                 </div>
                                 <div>
                                     <p className="font-bold">4. Angles de placement</p>
-                                    <p className="text-muted-foreground">Comment le produit peut être mentionné selon le sujet du post (exemples de phrases d'accroche, références subtiles, CTA naturels)</p>
+                                    <p className="text-muted-foreground">Comment le produit peut être mentionné selon le sujet du post (exemples de phrases, références subtiles, CTA naturels)</p>
                                 </div>
                                 <div>
                                     <p className="font-bold">5. Ce qu'il ne faut PAS faire</p>
@@ -200,8 +182,8 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
                                 </div>
                             </div>
 
-                            <div className="border-t border-amber-500/20 pt-3">
-                                <p className="font-bold text-amber-600 mb-2">Exemple de structure :</p>
+                            <div className="border-t border-violet-500/20 pt-3">
+                                <p className="font-bold text-violet-400 mb-2">Exemple de structure :</p>
                                 <pre className="text-xs bg-background/50 rounded p-3 overflow-x-auto whitespace-pre-wrap text-muted-foreground">{`# Mon Produit — Product Bible
 
 ## Concept
@@ -222,8 +204,8 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
 - "[Terme 2]" : [explication]
 
 ## Angles de placement par thème
-- Post sur [thème A] → mentionner [aspect du produit], ex: "[phrase exemple]"
-- Post sur [thème B] → référencer [aspect du produit], ex: "[phrase exemple]"
+- Post sur [thème A] -> mentionner [aspect du produit], ex: "[phrase exemple]"
+- Post sur [thème B] -> référencer [aspect du produit], ex: "[phrase exemple]"
 
 ## Règles de placement
 - TOUJOURS : rester subtil, la mention doit apporter de la VALEUR au lecteur
@@ -251,13 +233,13 @@ export function ProductDefinitionForm({ panel }: ProductDefinitionFormProps) {
                             <p className="text-xs text-muted-foreground">
                                 Plus le Product Bible est détaillé, plus les mentions produit seront naturelles et pertinentes.
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground tabular-nums">
                                 {formData.productBible.length.toLocaleString()} caractères
                             </p>
                         </div>
                     </div>
 
-                    {/* Save button for Bible */}
+                    {/* Save button */}
                     <div className="flex justify-end pt-2">
                         <Button
                             onClick={handleSave}
