@@ -1330,13 +1330,13 @@ Retourne UNIQUEMENT un objet JSON:
 
     // ... (inside image matching logic)
     // 2. Fetch Candidate Images
-    // Logic: exclude images utilized in last 15 posts (strict diversity)
+    // Logic: exclude images utilized in last 5 posts (light diversity window)
     // ✅ PERF: Fetch lastPosts and ALL candidate images in parallel, then filter in-memory
     const [lastPosts, allImages] = await Promise.all([
         prisma.post.findMany({
             where: { userId: finalUserId },
             orderBy: { createdAt: 'desc' },
-            take: 25, // 25 posts for stronger diversity across posts
+            take: 5, // 5 derniers posts seulement pour l'exclusion
             select: { slides: true }
         }),
         prisma.image.findMany({
@@ -1376,9 +1376,14 @@ Retourne UNIQUEMENT un objet JSON:
 
     // 3. Pre-filter by relevance + quality, then match with Claude
     try {
-        const slidesText = slides.map(s =>
-            `Slide ${s.slide_number}: "${s.text}" [Intention: ${s.intention}]`
-        ).join('\n');
+        // Build slide descriptions with emotional arc context
+        const totalSlides = slides.length;
+        const slidesText = slides.map((s, idx) => {
+            const position = idx === 0 ? 'OPENING (grab attention)'
+                : idx === totalSlides - 1 ? 'CLOSING (drive action)'
+                : `MIDDLE ${idx + 1}/${totalSlides}`;
+            return `Slide ${s.slide_number} [${position}] [Intention: ${s.intention}]: "${s.text}"`;
+        }).join('\n');
 
         // Build context keywords from all slides (hook text + slide texts)
         const allSlideText = slides.map(s => s.text).join(' ').toLowerCase();
@@ -1388,8 +1393,37 @@ Retourne UNIQUEMENT un objet JSON:
             .filter(w => w.length > 3);
         const contextSet = new Set(contextWords);
 
-        // Score each image: relevance (keywords + description match) + quality bonus
-        const scored = images.map(img => {
+        // === EMOTIONAL ARC: mood-based pool filtering ===
+        // Map each slide intention to compatible image moods for hard filtering
+        const intentionMoodMap: Record<string, string[]> = {
+            'hook':    ['bold', 'dramatic', 'energetic', 'powerful', 'striking', 'vibrant', 'intense', 'provocative', 'captivating', 'dynamic', 'fierce', 'audacious', 'electric', 'explosive', 'raw', 'edgy'],
+            'tension': ['dark', 'mysterious', 'dramatic', 'moody', 'intense', 'suspenseful', 'gritty', 'raw', 'shadowy', 'ominous', 'brooding', 'tense', 'haunting', 'melancholic', 'somber', 'deep', 'noir'],
+            'value':   ['clean', 'clear', 'professional', 'bright', 'calm', 'serene', 'confident', 'elegant', 'refined', 'polished', 'minimal', 'sophisticated', 'inspiring', 'uplifting', 'luminous', 'trustworthy'],
+            'cta':     ['warm', 'inviting', 'personal', 'cozy', 'friendly', 'bright', 'hopeful', 'optimistic', 'cheerful', 'welcoming', 'intimate', 'empowering', 'motivating', 'upbeat', 'positive', 'passionate', 'radiant'],
+        };
+
+        // Collect all target moods needed across every slide
+        const allTargetMoods = new Set<string>();
+        slides.forEach(s => {
+            const intention = (s.intention || 'value').toLowerCase();
+            const compatible = intentionMoodMap[intention] || intentionMoodMap['value'];
+            compatible.forEach(m => allTargetMoods.add(m));
+        });
+
+        // Hard filter: ONLY images whose mood matches the emotional needs of this carousel
+        const moodFiltered = images.filter(img => {
+            const imgMood = (img.mood || '').toLowerCase().trim();
+            if (!imgMood || imgMood === 'unknown' || imgMood === 'n/a') return false;
+            return [...allTargetMoods].some(target =>
+                imgMood.includes(target) || target.includes(imgMood)
+            );
+        });
+
+        // Fallback: if mood filter is too aggressive, use all images
+        const pool = moodFiltered.length >= slides.length * 3 ? moodFiltered : images;
+
+        // Score remaining images by text relevance (mood already hard-filtered)
+        const scored = pool.map(img => {
             let relevance = 0;
 
             // Keyword matching (strongest signal)
@@ -1402,54 +1436,32 @@ Retourne UNIQUEMENT un objet JSON:
                 }
             } catch { /* ignore parse errors */ }
 
-            // Description matching (weaker signal, broader coverage)
+            // Description matching (weaker signal)
             const descWords = (img.descriptionLong || '').toLowerCase().split(/\s+/).filter(w => w.length > 4);
             for (const w of descWords) {
                 if (contextSet.has(w)) relevance += 0.5;
             }
 
-            // Mood bonus: boost images whose mood relates to slide intentions
-            const mood = (img.mood || '').toLowerCase();
-            const intentions = slides.map(s => (s.intention || '').toLowerCase());
-            if (intentions.some(i => mood.includes(i) || i.includes(mood))) relevance += 2;
+            // Per-slide mood precision: bonus for each slide intention this image serves
+            const imgMood = (img.mood || '').toLowerCase();
+            slides.forEach(s => {
+                const intention = (s.intention || 'value').toLowerCase();
+                const compatible = intentionMoodMap[intention] || intentionMoodMap['value'];
+                if (compatible.some(m => imgMood.includes(m) || m.includes(imgMood))) {
+                    relevance += 1;
+                }
+            });
 
             const quality = img.qualityScore ?? 5;
-            // Softer formula: relevance dominates, quality is an additive bonus (not a multiplier)
-            // This avoids crushing relevant images with slightly lower quality scores
-            const combined = relevance + (quality / 5);
+            // Relevance-first: quality is a very minor additive bonus
+            const combined = relevance + (quality / 10);
 
             return { ...img, _relevance: relevance, _quality: quality, _score: combined, _mood: (img.mood || 'unknown').toLowerCase(), _style: (img.style || 'unknown').toLowerCase() };
         });
 
-        // Sort by combined score, take top 80
+        // Sort by score, take top 80 (all mood-compatible, relevance-ranked)
         scored.sort((a, b) => b._score - a._score);
-        const top80 = scored.slice(0, 80);
-
-        // Diversity pass: ensure mood/style variety in the candidate pool.
-        // Take the top 80 scored images, then ensure at least 3 different moods
-        // and 3 different styles are represented. If the pool is too homogeneous,
-        // inject diverse images from lower-ranked candidates.
-        const moodCounts = new Map<string, number>();
-        const styleCounts = new Map<string, number>();
-        top80.forEach(img => {
-            moodCounts.set(img._mood, (moodCounts.get(img._mood) || 0) + 1);
-            styleCounts.set(img._style, (styleCounts.get(img._style) || 0) + 1);
-        });
-
-        // If we have fewer than 3 unique moods in top80, inject from remaining pool
-        const uniqueMoods = new Set(top80.map(i => i._mood));
-        if (uniqueMoods.size < 3 && scored.length > 80) {
-            const remaining = scored.slice(80);
-            const missingMoods = remaining.filter(i => !uniqueMoods.has(i._mood));
-            // Add up to 20 diverse-mood images (replacing lowest-scored in top80)
-            const inject = missingMoods.slice(0, 20);
-            if (inject.length > 0) {
-                top80.splice(top80.length - inject.length, inject.length, ...inject);
-            }
-        }
-
-        // No shuffle — keep relevance order so Claude sees best candidates first
-        const candidateImages = top80;
+        const candidateImages = scored.slice(0, 80);
 
         const imagesText = candidateImages.map(i =>
             `ID: ${i.id} | Quality: ${i.qualityScore ?? 5}/10 | Desc: ${i.descriptionLong} | Keywords: ${i.keywords} | Mood: ${i.mood || 'N/A'} | Style: ${i.style || 'N/A'} | Colors: ${i.colors || 'N/A'}`
@@ -1457,16 +1469,21 @@ Retourne UNIQUEMENT un objet JSON:
 
         const matchingPrompt = `You are a visual director for viral TikTok carousels. Match the BEST image to each slide.
 
+EMOTIONAL ARC:
+This carousel follows an emotional journey. Each slide has a specific role in the arc:
+- OPENING (Hook): SHOCK and GRAB attention — needs bold, provocative, high-impact visuals that stop the scroll
+- MIDDLE (Tension): BUILD curiosity, create STAKES — needs mysterious, intriguing, tension-building visuals
+- MIDDLE (Value): DELIVER insight, build TRUST — needs clean, credible, authoritative visuals
+- CLOSING (CTA): DRIVE action, leave a LASTING impression — needs warm, personal, empowering visuals
+
+The viewer must FEEL the emotional progression through the images alone.
+
 MATCHING CRITERIA (in order of priority):
-1. **Image Quality**: STRONGLY prefer images with Quality score 7+/10. Avoid images below 5/10 unless no alternative exists.
-2. **Emotional Match**: The image mood MUST match the slide intention:
-   - Hook slides -> Bold, eye-catching, high-contrast images
-   - Tension slides -> Dark, mysterious, intriguing images
-   - Value slides -> Clean, clear, trustworthy images
-   - CTA slides -> Warm, inviting, personal images
-3. **Visual Storytelling**: Images should create a VISUAL PROGRESSION through the carousel. Don't use visually similar images back-to-back.
-4. **Content Relevance**: Image description/keywords should relate to the slide text topic.
-5. **Color Cohesion**: Prefer images that share a similar color palette for visual consistency across the carousel.
+1. **Emotional Match (MOST IMPORTANT)**: The image mood MUST match the slide's role in the emotional arc. A wrong mood breaks the entire carousel feel. Choose the image that generates the STRONGEST emotion aligned with the slide's intention.
+2. **Content Relevance & Visual Coherence**: The image MUST visually relate to the slide text. It should illustrate or emotionally amplify the message. The image and text together must tell a unified story.
+3. **Visual Storytelling**: Images should create a visual PROGRESSION mirroring the emotional arc. No visually similar images back-to-back. Each slide must feel like a new beat in the story.
+4. **Color Cohesion**: Prefer images with a coherent color palette across the carousel for visual flow.
+5. **Image Quality**: Prefer quality 7+/10 when possible, but NEVER sacrifice emotional match or content relevance for quality. A perfectly-mooded 6/10 image ALWAYS beats an irrelevant 9/10.
 
 CONSTRAINTS:
 - Each slide MUST have a UNIQUE image ID. NO duplicates.
