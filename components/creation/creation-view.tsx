@@ -2209,7 +2209,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
             {/* Image Picker Dialog */}
             <Dialog open={isImagePickerOpen} onOpenChange={setIsImagePickerOpen}>
-                <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col pt-10">
+                <DialogContent className="w-[95vw] sm:w-full sm:max-w-4xl max-h-[85vh] flex flex-col pt-10">
                     <DialogHeader>
                         <DialogTitle>Choisir une image pour la Slide {pickingSlideIndex !== null ? pickingSlideIndex + 1 : ''}</DialogTitle>
                         <DialogDescription>
@@ -2252,7 +2252,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 )
                                 : userImages;
                             return filtered.length > 0 ? (
-                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
                                     {filtered.map((img) => (
                                         <div
                                             key={img.id}
