@@ -1336,13 +1336,11 @@ Retourne UNIQUEMENT un objet JSON:
         prisma.post.findMany({
             where: { userId: finalUserId },
             orderBy: { createdAt: 'desc' },
-            take: 15,
+            take: 25, // 25 posts for stronger diversity across posts
             select: { slides: true }
         }),
         prisma.image.findMany({
             where: {
-                // When a specific collection is selected, don't filter by userId (collections are shared)
-                // When "all" is selected, only show the user's own images
                 ...(collectionId && collectionId !== 'all'
                     ? { collections: { some: { id: collectionId } } }
                     : { userId: finalUserId }
@@ -1365,10 +1363,15 @@ Retourne UNIQUEMENT un objet JSON:
     });
 
     // Filter out recently used images in-memory (avoids a second DB query)
-    const images = allImages.filter(img => !usedImageIds.has(img.id));
+    let images = allImages.filter(img => !usedImageIds.has(img.id));
+
+    // If exclusion removed too many images, relax: allow all images
+    if (images.length < slides.length * 2) {
+        images = allImages;
+    }
 
     if (images.length === 0) {
-        return { slides: slides, description, warning: "Pas assez d'images disponibles dans cette collection (ou filtre anti-répétition activé)." };
+        return { slides: slides, description, warning: "Pas assez d'images disponibles dans cette collection." };
     }
 
     // 3. Pre-filter by relevance + quality, then match with Claude
@@ -1385,7 +1388,7 @@ Retourne UNIQUEMENT un objet JSON:
             .filter(w => w.length > 3);
         const contextSet = new Set(contextWords);
 
-        // Score each image: relevance (keywords + description match) × quality
+        // Score each image: relevance (keywords + description match) + quality bonus
         const scored = images.map(img => {
             let relevance = 0;
 
@@ -1394,9 +1397,7 @@ Retourne UNIQUEMENT un objet JSON:
                 const imgKeywords: string[] = JSON.parse(img.keywords || '[]');
                 for (const kw of imgKeywords) {
                     const kwLower = kw.toLowerCase();
-                    // Exact keyword found in slide text
                     if (allSlideText.includes(kwLower)) relevance += 3;
-                    // Partial match (keyword word found in context)
                     else if ([...contextSet].some(w => kwLower.includes(w) || w.includes(kwLower))) relevance += 1;
                 }
             } catch { /* ignore parse errors */ }
@@ -1413,22 +1414,42 @@ Retourne UNIQUEMENT un objet JSON:
             if (intentions.some(i => mood.includes(i) || i.includes(mood))) relevance += 2;
 
             const quality = img.qualityScore ?? 5;
-            // Combined score: relevance weighted heavily, quality as multiplier
-            const combined = (relevance + 1) * (quality / 10);
+            // Softer formula: relevance dominates, quality is an additive bonus (not a multiplier)
+            // This avoids crushing relevant images with slightly lower quality scores
+            const combined = relevance + (quality / 5);
 
-            return { ...img, _relevance: relevance, _quality: quality, _score: combined };
+            return { ...img, _relevance: relevance, _quality: quality, _score: combined, _mood: (img.mood || 'unknown').toLowerCase(), _style: (img.style || 'unknown').toLowerCase() };
         });
 
-        // Sort by combined score (relevance × quality), take top 50
+        // Sort by combined score, take top 80
         scored.sort((a, b) => b._score - a._score);
-        const preFiltered = scored.slice(0, 50);
+        const top80 = scored.slice(0, 80);
 
-        // Shuffle within the top 50 for variety (avoid always picking same images)
-        for (let i = preFiltered.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [preFiltered[i], preFiltered[j]] = [preFiltered[j], preFiltered[i]];
+        // Diversity pass: ensure mood/style variety in the candidate pool.
+        // Take the top 80 scored images, then ensure at least 3 different moods
+        // and 3 different styles are represented. If the pool is too homogeneous,
+        // inject diverse images from lower-ranked candidates.
+        const moodCounts = new Map<string, number>();
+        const styleCounts = new Map<string, number>();
+        top80.forEach(img => {
+            moodCounts.set(img._mood, (moodCounts.get(img._mood) || 0) + 1);
+            styleCounts.set(img._style, (styleCounts.get(img._style) || 0) + 1);
+        });
+
+        // If we have fewer than 3 unique moods in top80, inject from remaining pool
+        const uniqueMoods = new Set(top80.map(i => i._mood));
+        if (uniqueMoods.size < 3 && scored.length > 80) {
+            const remaining = scored.slice(80);
+            const missingMoods = remaining.filter(i => !uniqueMoods.has(i._mood));
+            // Add up to 20 diverse-mood images (replacing lowest-scored in top80)
+            const inject = missingMoods.slice(0, 20);
+            if (inject.length > 0) {
+                top80.splice(top80.length - inject.length, inject.length, ...inject);
+            }
         }
-        const candidateImages = preFiltered;
+
+        // No shuffle — keep relevance order so Claude sees best candidates first
+        const candidateImages = top80;
 
         const imagesText = candidateImages.map(i =>
             `ID: ${i.id} | Quality: ${i.qualityScore ?? 5}/10 | Desc: ${i.descriptionLong} | Keywords: ${i.keywords} | Mood: ${i.mood || 'N/A'} | Style: ${i.style || 'N/A'} | Colors: ${i.colors || 'N/A'}`
