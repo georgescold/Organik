@@ -526,6 +526,7 @@ model AdminPanel {
   productUrl         String?
   targetAudience     String?
   positioning        String?
+  productBible       String?  @db.Text  // Full product knowledge base for subtle placement
 
   selectedProfiles   AdminPanelProfile[]
 

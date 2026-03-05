@@ -784,8 +784,8 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     const activeProfileId = await getActiveProfileId(finalUserId);
     if (!activeProfileId) return { error: 'No active profile found' };
 
-    // ✅ PERF: Parallelize profile + posts + existingSlides + insights queries
-    const [profile, allTopPosts, existingPosts, narrativeInsights] = await Promise.all([
+    // ✅ PERF: Parallelize profile + posts + existingSlides + insights + productBible queries
+    const [profile, allTopPosts, existingPosts, narrativeInsights, productBibleData] = await Promise.all([
         prisma.profile.findUnique({ where: { id: activeProfileId } }),
         // Fetch top 20 posts by views — we'll segment viral (10k+) vs best performers after
         prisma.metrics.findMany({
@@ -809,8 +809,21 @@ export async function generateCarousel(hook: string, collectionId?: string, user
             select: { slides: true, hookText: true, description: true, createdAt: true }
         }),
         // Fetch narrative insights for consistency
-        getCachedInsights(activeProfileId, userApiKey).catch(() => null)
+        getCachedInsights(activeProfileId, userApiKey).catch(() => null),
+        // Fetch product bible from admin panel linked to this profile
+        prisma.adminPanelProfile.findFirst({
+            where: { profileId: activeProfileId },
+            include: {
+                adminPanel: {
+                    select: { productBible: true, productName: true, productUrl: true }
+                }
+            }
+        }).catch(() => null)
     ]);
+
+    // Extract product bible if available
+    const productBible = productBibleData?.adminPanel?.productBible || null;
+    const productName = productBibleData?.adminPanel?.productName || null;
 
     // Segment posts: viral (10k+ views) vs top performers (best available)
     const trulyViralPosts = allTopPosts.filter(m => m.views >= VIRAL_THRESHOLD);
@@ -1254,6 +1267,20 @@ ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien f
 - INTERDIT: le caractère flèche '→'
 ${narrativeContext}
 ${uniquenessContext}
+${productBible ? `\n--- PRODUCT BIBLE (PLACEMENT SUBTIL) ---
+Tu as accès à la base de connaissances complète du produit "${productName || 'le produit'}". Ton objectif est d'intégrer des RÉFÉRENCES SUBTILES et NATURELLES à ce produit dans le carrousel UNIQUEMENT quand c'est pertinent par rapport au sujet du post.
+
+RÈGLES DE PLACEMENT OBLIGATOIRES:
+1. SUBTILITÉ ABSOLUE: Le post doit rester un contenu de VALEUR avant tout. La mention produit doit sembler être un exemple naturel, une anecdote, une référence organique — JAMAIS une publicité.
+2. PERTINENCE: Ne mentionne le produit QUE si le sujet du carrousel permet une connexion naturelle. Si le hook parle d'un sujet sans rapport → ne force AUCUNE mention.
+3. DOSAGE: Maximum 1-2 slides peuvent contenir une référence produit (sur 7-8 slides). Les slides restantes doivent être du pur contenu de valeur.
+4. INTÉGRATION: La mention doit s'intégrer dans le flow du texte comme un EXEMPLE concret, une RECOMMANDATION naturelle, ou une ILLUSTRATION du propos. Jamais en rupture de ton.
+5. VOCABULAIRE: Utilise le vocabulaire et les termes spécifiques du produit décrits dans le bible ci-dessous pour que les mentions sonnent authentiques.
+6. CTA: Si le produit est mentionné, le CTA de la dernière slide PEUT inclure une référence plus directe (mais toujours dans le style du créateur).
+
+PRODUCT BIBLE:
+${productBible}
+---` : ''}
 ${customInstructions ? `\n--- CONSIGNES PERSONNALISÉES DE L'UTILISATEUR ---\nRespecte impérativement ces consignes supplémentaires données par le créateur :\n${customInstructions}\n---` : ''}
 
 --- FORMAT DE SORTIE ---

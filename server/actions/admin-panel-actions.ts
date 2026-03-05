@@ -95,6 +95,7 @@ export async function updateAdminPanel(panelId: string, data: {
     productUrl?: string;
     targetAudience?: string;
     positioning?: string;
+    productBible?: string;
 }) {
     const session = await auth();
     if (!session?.user?.id) return { error: 'Unauthorized' };
