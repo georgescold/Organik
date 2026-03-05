@@ -68,7 +68,11 @@ export async function uploadImage(formData: FormData) {
                 .from(SUPABASE_BUCKET)
                 .getPublicUrl(storagePath);
 
-            const publicUrl = urlData.publicUrl;
+            const publicUrl = urlData?.publicUrl;
+            if (!publicUrl) {
+                console.error(`Failed to get public URL for ${storagePath}`);
+                return { error: `Failed to get URL for ${file.name}` };
+            }
 
             // 2. DB Prep
             const timestamp = Date.now().toString().slice(-6);
@@ -195,12 +199,14 @@ export async function getUserImages(collectionId?: string, page: number = 1, lim
             prisma.image.count({ where: whereClause })
         ]);
 
-        // Parse JSON strings to arrays for keywords and colors
-        const images = imagesRaw.map(img => ({
-            ...img,
-            keywords: JSON.parse(img.keywords || '[]') as string[],
-            colors: JSON.parse(img.colors || '[]') as string[],
-        }));
+        // Parse JSON strings to arrays for keywords and colors (safe parse)
+        const images = imagesRaw.map(img => {
+            let keywords: string[] = [];
+            let colors: string[] = [];
+            try { keywords = JSON.parse(img.keywords || '[]'); } catch { /* corrupted data, default to empty */ }
+            try { colors = JSON.parse(img.colors || '[]'); } catch { /* corrupted data, default to empty */ }
+            return { ...img, keywords, colors };
+        });
 
         return { success: true, images, total, page, limit };
     } catch (e) {

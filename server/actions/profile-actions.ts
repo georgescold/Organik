@@ -53,29 +53,34 @@ export async function createProfile(formData: z.infer<typeof ProfileSchema>) {
     if (!session?.user?.id) return { error: 'Not authenticated' };
 
     const { tiktokName, tiktokBio, persona, targetAudience } = formData;
+    const userId = session.user.id!;
 
     try {
         // Get user's Apify key
         const user = await prisma.user.findUnique({
-            where: { id: session.user.id },
+            where: { id: userId },
             select: { apifyApiKey: true }
         });
 
-        const profile = await prisma.profile.create({
-            data: {
-                userId: session.user.id,
-                displayName: tiktokName,
-                bio: tiktokBio,
-                persona,
-                targetAudience,
-            },
-        });
+        // Atomic: create profile + set as active in a single transaction
+        const profile = await prisma.$transaction(async (tx) => {
+            const p = await tx.profile.create({
+                data: {
+                    userId,
+                    displayName: tiktokName,
+                    bio: tiktokBio,
+                    persona,
+                    targetAudience,
+                },
+            });
 
-        // Set as active if it's the first one or requested? 
-        // Let's set as active automatically for better UX
-        await prisma.user.update({
-            where: { id: session.user.id },
-            data: { activeProfileId: profile.id }
+            // Set as active automatically for better UX
+            await tx.user.update({
+                where: { id: userId },
+                data: { activeProfileId: p.id }
+            });
+
+            return p;
         });
 
         revalidatePath('/dashboard');

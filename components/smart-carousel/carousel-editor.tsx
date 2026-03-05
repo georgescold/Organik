@@ -122,9 +122,12 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
         img.onload = () => {
             const ratio = img.naturalWidth / img.naturalHeight;
             // Keep width at CANVAS_BASE_W, compute height from ratio
+            // Clamp to reasonable bounds: min 360 (1:1), max 800 (9:20)
             const h = Math.round(CANVAS_BASE_W / ratio);
+            const clamped = Math.max(CANVAS_BASE_W, Math.min(800, h));
+            if (!isFinite(clamped)) return; // corrupted image, keep defaults
             setCanvasW(CANVAS_BASE_W);
-            setCanvasH(h);
+            setCanvasH(clamped);
         };
         img.src = firstImg.backgroundImage.imageUrl;
     }, []); // Run once on mount
