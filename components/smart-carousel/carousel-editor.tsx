@@ -364,6 +364,16 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
     const updateLayer = (layerId: string, updates: Partial<TextLayer>) => {
         const layers = activeSlide.layers.map(layer => {
             if (layer.id !== layerId) return layer;
+            const tl = layer as TextLayer;
+
+            // Proportional outlineWidth: when fontSize changes, scale outlineWidth
+            // to maintain the same ratio (e.g. 1.5px outline at 28px font → 3px at 56px).
+            // Only auto-adjust when outlineWidth is NOT explicitly set in the same update.
+            if (updates.fontSize && !('outlineWidth' in updates) && tl.outlineWidth && tl.outlineWidth > 0 && tl.fontSize > 0) {
+                const ratio = tl.outlineWidth / tl.fontSize;
+                updates = { ...updates, outlineWidth: parseFloat((updates.fontSize * ratio).toFixed(2)) };
+            }
+
             return { ...layer, ...updates } as TextLayer;
         });
         updateSlide({ layers });
