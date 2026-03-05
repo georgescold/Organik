@@ -282,16 +282,44 @@ POUR LES suggestedAngles (3-5 par profil) :
 
         const message = await anthropic.messages.create({
             model: 'claude-sonnet-4-6',
-            max_tokens: 6000,
+            max_tokens: 8192,
             messages: [{
                 role: 'user',
                 content: [{ type: 'text' as const, text: prompt, cache_control: { type: 'ephemeral' as const } }]
             }]
         });
 
+        // Check if response was truncated
+        if (message.stop_reason === 'max_tokens') {
+            console.error('⚠️ Macro analysis response truncated (max_tokens reached)');
+        }
+
         const text = (message.content[0] as any).text;
         const cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
-        const analysis: Partial<MacroAnalysisData> = JSON.parse(cleanJson);
+
+        let analysis: Partial<MacroAnalysisData>;
+        try {
+            analysis = JSON.parse(cleanJson);
+        } catch (parseError) {
+            // Attempt to repair truncated JSON by closing open structures
+            console.warn('⚠️ JSON parse failed, attempting repair...');
+            let repaired = cleanJson;
+            // Count open/close braces and brackets
+            const openBraces = (repaired.match(/\{/g) || []).length;
+            const closeBraces = (repaired.match(/\}/g) || []).length;
+            const openBrackets = (repaired.match(/\[/g) || []).length;
+            const closeBrackets = (repaired.match(/\]/g) || []).length;
+            // Close open brackets then braces
+            for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
+            for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
+            try {
+                analysis = JSON.parse(repaired);
+                console.log('✅ JSON repair succeeded');
+            } catch {
+                console.error('❌ JSON repair failed, raw text length:', text.length);
+                throw parseError;
+            }
+        }
 
         // 7. Add metadata
         const fullAnalysis: MacroAnalysisData = {
