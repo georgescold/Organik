@@ -641,6 +641,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [isLoadingImages, setIsLoadingImages] = useState(false);
     const [pickerCollectionId, setPickerCollectionId] = useState<string>('all');
     const [pickerSearch, setPickerSearch] = useState('');
+    const pickerCacheRef = useRef<Map<string, any[]>>(new Map());
 
     const loadDrafts = async () => {
         const [draftsRes, ideasRes, collectionsRes] = await Promise.all([getDrafts(), getSavedIdeas(), getUserCollections()]);
@@ -718,16 +719,17 @@ export function CreationView({ initialPost }: CreationViewProps) {
     // Scroll to inline config when a hook is selected (important on mobile)
     useEffect(() => {
         if (selectedHook && inlineConfigRef.current) {
-            setTimeout(() => {
+            const t = setTimeout(() => {
                 inlineConfigRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }, 100);
+            return () => clearTimeout(t);
         }
     }, [selectedHook]);
 
     // Load Twemoji script eagerly so it's ready for rendering
     const [twemojiReady, setTwemojiReady] = useState(false);
     useEffect(() => {
-        loadTwemojiScript().then(() => setTwemojiReady(true)).catch(() => {});
+        loadTwemojiScript().then(() => setTwemojiReady(true)).catch(e => console.warn('Twemoji load failed:', e));
     }, []);
 
     /**
@@ -760,9 +762,16 @@ export function CreationView({ initialPost }: CreationViewProps) {
     }, [twemojiReady]);
 
     const loadPickerImages = async (collectionId: string) => {
+        // Check cache first — don't reload if already fetched
+        const cached = pickerCacheRef.current.get(collectionId);
+        if (cached) {
+            setUserImages(cached);
+            return;
+        }
         setIsLoadingImages(true);
         const res = await getUserImages(collectionId === 'all' ? undefined : collectionId, 1, 0);
         if (res.success && res.images) {
+            pickerCacheRef.current.set(collectionId, res.images);
             setUserImages(res.images);
         } else {
             toast.error("Impossible de charger vos images");

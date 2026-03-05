@@ -238,21 +238,21 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             // Delete: Delete or Backspace
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.preventDefault();
-                deleteLayer(selectedLayerId);
+                layerFnsRef.current.deleteLayer(selectedLayerId);
                 return;
             }
             // Duplicate: Ctrl+D
             if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
                 e.preventDefault();
-                duplicateLayer(selectedLayerId);
+                layerFnsRef.current.duplicateLayer(selectedLayerId);
                 return;
             }
             // Nudge with arrow keys
             const nudge = e.shiftKey ? 5 : 1;
-            if (e.key === 'ArrowLeft') { e.preventDefault(); updateLayer(selectedLayerId, { x: Math.max(0, (selectedLayer?.x ?? 50) - nudge) }); }
-            if (e.key === 'ArrowRight') { e.preventDefault(); updateLayer(selectedLayerId, { x: Math.min(100, (selectedLayer?.x ?? 50) + nudge) }); }
-            if (e.key === 'ArrowUp') { e.preventDefault(); updateLayer(selectedLayerId, { y: Math.max(0, (selectedLayer?.y ?? 50) - nudge) }); }
-            if (e.key === 'ArrowDown') { e.preventDefault(); updateLayer(selectedLayerId, { y: Math.min(100, (selectedLayer?.y ?? 50) + nudge) }); }
+            if (e.key === 'ArrowLeft') { e.preventDefault(); layerFnsRef.current.updateLayer(selectedLayerId, { x: Math.max(0, (selectedLayer?.x ?? 50) - nudge) }); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); layerFnsRef.current.updateLayer(selectedLayerId, { x: Math.min(100, (selectedLayer?.x ?? 50) + nudge) }); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); layerFnsRef.current.updateLayer(selectedLayerId, { y: Math.max(0, (selectedLayer?.y ?? 50) - nudge) }); }
+            if (e.key === 'ArrowDown') { e.preventDefault(); layerFnsRef.current.updateLayer(selectedLayerId, { y: Math.min(100, (selectedLayer?.y ?? 50) + nudge) }); }
             // Escape: deselect
             if (e.key === 'Escape') {
                 setSelectedLayerId(null);
@@ -372,9 +372,10 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             // Proportional outlineWidth: when fontSize changes, scale outlineWidth
             // to maintain the same ratio (e.g. 1.5px outline at 28px font → 3px at 56px).
             // Only auto-adjust when outlineWidth is NOT explicitly set in the same update.
-            if (updates.fontSize && !('outlineWidth' in updates) && tl.outlineWidth && tl.outlineWidth > 0 && tl.fontSize > 0) {
+            if (updates.fontSize && updates.fontSize > 0 && !('outlineWidth' in updates) && tl.outlineWidth && tl.outlineWidth > 0 && tl.fontSize > 0) {
                 const ratio = tl.outlineWidth / tl.fontSize;
-                updates = { ...updates, outlineWidth: parseFloat((updates.fontSize * ratio).toFixed(2)) };
+                const scaled = Math.max(0.1, Math.min(20, updates.fontSize * ratio));
+                updates = { ...updates, outlineWidth: parseFloat(scaled.toFixed(2)) };
             }
 
             return { ...layer, ...updates } as TextLayer;
@@ -402,6 +403,10 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
         updateSlide({ layers: [...activeSlide.layers, newLayer] });
         setSelectedLayerId(newLayer.id);
     };
+
+    // Refs to always access latest versions of layer functions from keyboard handler
+    const layerFnsRef = useRef({ deleteLayer, duplicateLayer, updateLayer });
+    layerFnsRef.current = { deleteLayer, duplicateLayer, updateLayer };
 
     const handlePositionChange = (layerId: string, x: number, y: number) => updateLayer(layerId, { x, y });
     const handleResize = (layerId: string, fontSize: number) => updateLayer(layerId, { fontSize });

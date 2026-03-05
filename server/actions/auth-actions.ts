@@ -30,7 +30,12 @@ export async function register(formData: z.infer<typeof RegisterSchema>) {
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    let hashedPassword: string;
+    try {
+        hashedPassword = await bcrypt.hash(password, 10);
+    } catch {
+        return { error: 'Failed to process password' };
+    }
 
     // Create user
     try {

@@ -12,8 +12,11 @@ export async function GET() {
     }
 
     try {
-        // 1. Fetch all images
-        const images = await prisma.image.findMany();
+        // 1. Fetch user's images (only fields needed for backup)
+        const images = await prisma.image.findMany({
+            where: { userId: session.user.id },
+            select: { id: true, storageUrl: true, humanId: true }
+        });
 
         if (images.length === 0) {
             return new NextResponse('No images to backup', { status: 404 });
