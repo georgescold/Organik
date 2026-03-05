@@ -175,8 +175,7 @@ export async function getUserImages(collectionId?: string, page: number = 1, lim
             prisma.image.findMany({
                 where: whereClause,
                 orderBy: { createdAt: 'desc' },
-                take: limit,
-                skip: (page - 1) * limit,
+                ...(limit > 0 ? { take: limit, skip: (page - 1) * limit } : {}),
                 select: {
                     id: true,
                     humanId: true,

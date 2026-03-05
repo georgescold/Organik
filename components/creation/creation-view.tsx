@@ -761,7 +761,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
     const loadPickerImages = async (collectionId: string) => {
         setIsLoadingImages(true);
-        const res = await getUserImages(collectionId === 'all' ? undefined : collectionId, 1, 500);
+        const res = await getUserImages(collectionId === 'all' ? undefined : collectionId, 1, 0);
         if (res.success && res.images) {
             setUserImages(res.images);
         } else {
