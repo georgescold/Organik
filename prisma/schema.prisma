@@ -331,6 +331,10 @@ model Post {
   // Scheduling
   scheduledAt DateTime?  // When this post should be published (null = manual publish)
 
+  // Conversion tracking (manual annotation)
+  converted      Boolean  @default(false)
+  conversionNote String?
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -528,6 +532,7 @@ model AdminPanel {
   productBible       String?  @db.Text  // Full product knowledge base for subtle placement
 
   selectedProfiles   AdminPanelProfile[]
+  macroAnalysis      PanelMacroAnalysis?
 
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -550,4 +555,19 @@ model AdminPanelProfile {
   @@unique([adminPanelId, profileId])
   @@index([adminPanelId])
   @@index([profileId])
+}
+
+model PanelMacroAnalysis {
+  id                String     @id @default(cuid())
+  adminPanelId      String     @unique
+  adminPanel        AdminPanel @relation(fields: [adminPanelId], references: [id], onDelete: Cascade)
+
+  analysis          String     @db.Text  // JSON MacroAnalysisData
+  basedOnPostsCount Int        @default(0)
+  profileCount      Int        @default(0)
+
+  lastUpdatedAt     DateTime   @default(now())
+  createdAt         DateTime   @default(now())
+
+  @@index([adminPanelId])
 }

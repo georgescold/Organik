@@ -250,6 +250,7 @@ export async function getPanelMetrics(panelId: string) {
                 description: true,
                 publishedAt: true,
                 coverUrl: true,
+                converted: true,
                 metrics: {
                     select: { views: true, likes: true, comments: true, shares: true, saves: true }
                 },
@@ -281,5 +282,84 @@ export async function getPanelMetrics(panelId: string) {
     } catch (e) {
         console.error("Fetch panel metrics error:", e);
         return { error: 'Failed to fetch metrics' };
+    }
+}
+
+// ============= MACRO ANALYSIS =============
+
+export async function runMacroAnalysis(panelId: string, forceRefresh: boolean = false) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: 'Unauthorized' };
+
+    try {
+        // Get user's API key
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { anthropicApiKey: true }
+        });
+
+        if (!user?.anthropicApiKey) {
+            return { error: 'Clé API Anthropic non configurée. Ajoutez votre clé dans les paramètres.' };
+        }
+
+        // Check cache (7 days)
+        if (!forceRefresh) {
+            const cached = await prisma.panelMacroAnalysis.findUnique({
+                where: { adminPanelId: panelId }
+            });
+
+            if (cached) {
+                const cacheAge = Date.now() - cached.lastUpdatedAt.getTime();
+                const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+                if (cacheAge < sevenDaysMs) {
+                    return {
+                        success: true,
+                        analysis: JSON.parse(cached.analysis),
+                        fromCache: true,
+                        cachedAt: cached.lastUpdatedAt.toISOString()
+                    };
+                }
+            }
+        }
+
+        // Generate new analysis
+        const { generateMacroAnalysis } = await import('@/lib/ai/macro-analysis-generator');
+        const analysis = await generateMacroAnalysis(panelId, user.anthropicApiKey);
+
+        if (!analysis) {
+            return { error: 'Impossible de générer l\'analyse. Vérifiez que le panel contient des comptes avec des posts.' };
+        }
+
+        return { success: true, analysis, fromCache: false };
+    } catch (e) {
+        console.error("Run macro analysis error:", e);
+        return { error: 'Erreur lors de la génération de l\'analyse macro' };
+    }
+}
+
+export async function getCachedMacroAnalysis(panelId: string) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: 'Unauthorized' };
+
+    try {
+        const cached = await prisma.panelMacroAnalysis.findUnique({
+            where: { adminPanelId: panelId }
+        });
+
+        if (!cached) {
+            return { success: true, analysis: null };
+        }
+
+        return {
+            success: true,
+            analysis: JSON.parse(cached.analysis),
+            cachedAt: cached.lastUpdatedAt.toISOString(),
+            basedOnPostsCount: cached.basedOnPostsCount,
+            profileCount: cached.profileCount,
+        };
+    } catch (e) {
+        console.error("Get cached macro analysis error:", e);
+        return { error: 'Erreur lors de la récupération de l\'analyse' };
     }
 }

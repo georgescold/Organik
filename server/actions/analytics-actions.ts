@@ -503,7 +503,9 @@ export async function getPostDetails(postId: string) {
             slides: resolvedSlides,
             // Pass raw fields too if needed
             videoUrl: (post as any).videoUrl,
-            carouselImages: (post as any).carouselImages
+            carouselImages: (post as any).carouselImages,
+            converted: (post as any).converted ?? false,
+            conversionNote: (post as any).conversionNote ?? null,
         };
 
         return {
@@ -514,6 +516,25 @@ export async function getPostDetails(postId: string) {
     } catch (e) {
         console.error("Error fetching post details:", e);
         return { error: 'Failed to fetch details' };
+    }
+}
+
+export async function togglePostConversion(postId: string, converted: boolean, conversionNote?: string) {
+    const session = await auth();
+    if (!session?.user?.id) return { error: 'Unauthorized' };
+
+    try {
+        await prisma.post.update({
+            where: { id: postId, userId: session.user.id },
+            data: {
+                converted,
+                conversionNote: conversionNote ?? null,
+            }
+        });
+        return { success: true };
+    } catch (e) {
+        console.error("Toggle conversion error:", e);
+        return { error: 'Failed to toggle conversion' };
     }
 }
 

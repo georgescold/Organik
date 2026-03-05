@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Users, Heart, Video, Eye, FileText, Loader2, TrendingUp, UserCircle } from 'lucide-react';
+import { Users, Heart, Video, Eye, FileText, Loader2, TrendingUp, UserCircle, ArrowUpRight } from 'lucide-react';
 import { getPanelMetrics } from '@/server/actions/admin-panel-actions';
 
 interface PanelMetricsOverviewProps {
@@ -180,9 +180,17 @@ export function PanelMetricsOverview({ panelId }: PanelMetricsOverviewProps) {
                                                 </div>
                                             </td>
                                             <td className="py-2.5 pr-3">
-                                                <p className="truncate max-w-[120px] sm:max-w-[200px] text-muted-foreground text-xs">
-                                                    {post.hookText || post.description || '—'}
-                                                </p>
+                                                <div className="flex items-center gap-1.5">
+                                                    {post.converted && (
+                                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 text-[10px] font-bold shrink-0">
+                                                            <ArrowUpRight className="h-2.5 w-2.5" />
+                                                            Conv.
+                                                        </span>
+                                                    )}
+                                                    <p className="truncate max-w-[120px] sm:max-w-[200px] text-muted-foreground text-xs">
+                                                        {post.hookText || post.description || '—'}
+                                                    </p>
+                                                </div>
                                             </td>
                                             <td className="py-2.5 text-right tabular-nums font-bold text-xs">
                                                 {formatNumber(post.metrics?.views || 0)}

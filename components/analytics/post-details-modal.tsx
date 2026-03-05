@@ -7,14 +7,14 @@ import { EditPostDialog } from './edit-post-dialog';
 import { EditSlideDialog } from './edit-slide-dialog';
 import { Pencil } from 'lucide-react';
 
-import { getPostDetails, updatePost } from '@/server/actions/analytics-actions';
+import { getPostDetails, updatePost, togglePostConversion } from '@/server/actions/analytics-actions';
 import { scrapePostCarouselImages } from '@/server/actions/scrape-actions';
 import { toast } from 'sonner';
 import { Loader2, Eye, Heart, MessageCircle, Bookmark, Images } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import Image from 'next/image';
 import { analyzePost } from '@/server/actions/analytics-actions';
-import { Trophy, TrendingUp, Zap, Wand2 } from 'lucide-react';
+import { Trophy, TrendingUp, Zap, Wand2, Check, ArrowUpRight } from 'lucide-react';
 
 interface PostDetailsModalProps {
     postId: string;
@@ -48,6 +48,8 @@ interface DetailedPost {
         performanceScore: number;
         intelligentScore: number;
     } | null;
+    converted: boolean;
+    conversionNote: string | null;
 }
 
 export function PostDetailsModal({ postId, children, initialTitle }: PostDetailsModalProps) {
@@ -64,6 +66,8 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
         comments: string | number;
     }>({ views: 0, likes: 0, saves: 0, comments: 0 });
     const [isScrapingImages, setIsScrapingImages] = useState(false);
+    const [conversionState, setConversionState] = useState<{ converted: boolean; note: string }>({ converted: false, note: '' });
+    const [isSavingConversion, setIsSavingConversion] = useState(false);
 
     const handleOpenChange = async (newOpen: boolean) => {
         setOpen(newOpen);
@@ -77,7 +81,12 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
         try {
             const result = await getPostDetails(postId);
             if (result.success && result.post) {
-                setPost(result.post as unknown as DetailedPost);
+                const postData = result.post as unknown as DetailedPost;
+                setPost(postData);
+                setConversionState({
+                    converted: postData.converted ?? false,
+                    note: postData.conversionNote ?? ''
+                });
                 if (result.post.metrics) {
                     setMetricsForm({
                         views: result.post.metrics.views,
@@ -140,6 +149,34 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleToggleConversion = async (newConverted: boolean) => {
+        if (!post) return;
+        setIsSavingConversion(true);
+        setConversionState(prev => ({ ...prev, converted: newConverted }));
+        const result = await togglePostConversion(post.id, newConverted, conversionState.note || undefined);
+        if (result.success) {
+            toast.success(newConverted ? 'Post marqué comme converti ✓' : 'Conversion retirée');
+            setPost({ ...post, converted: newConverted });
+        } else {
+            setConversionState(prev => ({ ...prev, converted: !newConverted }));
+            toast.error('Erreur lors de la mise à jour');
+        }
+        setIsSavingConversion(false);
+    };
+
+    const handleSaveConversionNote = async () => {
+        if (!post) return;
+        setIsSavingConversion(true);
+        const result = await togglePostConversion(post.id, conversionState.converted, conversionState.note || undefined);
+        if (result.success) {
+            toast.success('Note de conversion enregistrée');
+            setPost({ ...post, conversionNote: conversionState.note || null });
+        } else {
+            toast.error('Erreur lors de la sauvegarde');
+        }
+        setIsSavingConversion(false);
     };
 
     return (
@@ -321,6 +358,50 @@ export function PostDetailsModal({ postId, children, initialTitle }: PostDetails
                                         <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-500" />
                                         <span className="font-bold text-sm sm:text-lg">{post.metrics?.comments.toLocaleString()}</span>
                                         <span className="text-xs sm:text-sm text-muted-foreground">coms</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Conversion Toggle */}
+                        <div className={`p-4 sm:p-5 rounded-xl border-2 transition-all ${conversionState.converted ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-muted/10 border-border/30 hover:border-border/50'}`}>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => handleToggleConversion(!conversionState.converted)}
+                                    disabled={isSavingConversion}
+                                    className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all shrink-0 ${
+                                        conversionState.converted
+                                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                                            : 'border-muted-foreground/30 hover:border-emerald-500/50'
+                                    }`}
+                                >
+                                    {conversionState.converted && <Check className="h-4 w-4" />}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-bold ${conversionState.converted ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+                                        {conversionState.converted ? 'Post converti ✓' : 'Marquer comme converti'}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Ce post a généré du trafic vers le produit
+                                    </p>
+                                </div>
+                                {conversionState.converted && (
+                                    <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
+                                )}
+                            </div>
+
+                            {conversionState.converted && (
+                                <div className="mt-3 pl-9">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={conversionState.note}
+                                            onChange={(e) => setConversionState(prev => ({ ...prev, note: e.target.value }))}
+                                            onBlur={handleSaveConversionNote}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSaveConversionNote()}
+                                            placeholder="Note optionnelle (ex: lien en bio, commentaire...)"
+                                            className="flex-1 text-xs bg-transparent border-b border-emerald-500/20 focus:border-emerald-500/50 outline-none py-1 text-muted-foreground placeholder:text-muted-foreground/40"
+                                        />
                                     </div>
                                 </div>
                             )}

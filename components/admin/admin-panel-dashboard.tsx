@@ -2,19 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Package, GitBranch, BarChart3, Pencil } from 'lucide-react';
+import { ArrowLeft, Package, GitBranch, BarChart3, Pencil, Brain } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { updateAdminPanel } from '@/server/actions/admin-panel-actions';
 import { toast } from 'sonner';
 import { ProductDefinitionForm } from './product-definition-form';
 import { AccountTreeView } from './account-tree-view';
 import { PanelMetricsOverview } from './panel-metrics-overview';
+import { PanelMacroAnalysis } from './panel-macro-analysis';
 
 interface AdminPanelDashboardProps {
     panel: any;
 }
 
-type TabId = 'product' | 'accounts' | 'metrics';
+type TabId = 'product' | 'accounts' | 'metrics' | 'analysis';
 
 export function AdminPanelDashboard({ panel }: AdminPanelDashboardProps) {
     const [activeTab, setActiveTab] = useState<TabId>('accounts');
@@ -39,6 +40,7 @@ export function AdminPanelDashboard({ panel }: AdminPanelDashboardProps) {
         { id: 'accounts', label: 'COMPTES', icon: <GitBranch className="h-4 w-4" /> },
         { id: 'product', label: 'PRODUIT', icon: <Package className="h-4 w-4" /> },
         { id: 'metrics', label: "VUE D'ENSEMBLE", icon: <BarChart3 className="h-4 w-4" /> },
+        { id: 'analysis', label: 'ANALYSE', icon: <Brain className="h-4 w-4" /> },
     ];
 
     return (
@@ -114,6 +116,9 @@ export function AdminPanelDashboard({ panel }: AdminPanelDashboardProps) {
                 )}
                 {activeTab === 'metrics' && (
                     <PanelMetricsOverview panelId={panel.id} />
+                )}
+                {activeTab === 'analysis' && (
+                    <PanelMacroAnalysis panelId={panel.id} />
                 )}
             </div>
         </div>
