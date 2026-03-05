@@ -91,7 +91,6 @@ export async function createAdminPanel(name: string = 'Mon Panel') {
 export async function updateAdminPanel(panelId: string, data: {
     name?: string;
     productName?: string;
-    productDescription?: string;
     productUrl?: string;
     targetAudience?: string;
     positioning?: string;

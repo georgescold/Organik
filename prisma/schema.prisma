@@ -522,7 +522,6 @@ model AdminPanel {
 
   name               String   @default("Mon Panel")
   productName        String?
-  productDescription String?
   productUrl         String?
   targetAudience     String?
   positioning        String?

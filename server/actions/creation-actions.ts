@@ -815,7 +815,7 @@ export async function generateCarousel(hook: string, collectionId?: string, user
             where: { profileId: activeProfileId },
             include: {
                 adminPanel: {
-                    select: { productBible: true, productName: true, productUrl: true }
+                    select: { productBible: true, productName: true }
                 }
             }
         }).catch(() => null)
