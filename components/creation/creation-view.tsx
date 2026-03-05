@@ -774,13 +774,40 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
     const handleSelectImage = (image: any) => {
         if (pickingSlideIndex !== null) {
+            const idx = pickingSlideIndex;
             const newSlides = [...slides];
-            newSlides[pickingSlideIndex] = {
-                ...newSlides[pickingSlideIndex],
+            newSlides[idx] = {
+                ...newSlides[idx],
                 image_id: image.id,
                 image_url: image.storageUrl
             };
             setSlides(newSlides);
+
+            // Clear the canvas-rendered preview for this slide so the new image shows
+            setPreviewImages(prev => {
+                if (!prev[idx]) return prev;
+                const next = [...prev];
+                next[idx] = '';
+                return next;
+            });
+
+            // Update savedEditorData so reopening the canvas editor uses the new image
+            if (savedEditorData && savedEditorData.slides[idx]) {
+                const updatedEdSlides = [...savedEditorData.slides];
+                updatedEdSlides[idx] = {
+                    ...updatedEdSlides[idx],
+                    backgroundImage: {
+                        imageId: image.id,
+                        imageUrl: image.storageUrl,
+                        objectFit: 'cover',
+                        objectPosition: 'center',
+                        scale: 1,
+                        filter: { brightness: 100, contrast: 100, blur: 0, saturate: 100, hueRotate: 0, sepia: 0 },
+                    },
+                };
+                setSavedEditorData({ ...savedEditorData, slides: updatedEdSlides });
+            }
+
             setIsImagePickerOpen(false);
             setPickingSlideIndex(null);
         }
