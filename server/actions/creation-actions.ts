@@ -824,6 +824,7 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     // Extract product bible if available
     const productBible = productBibleData?.adminPanel?.productBible || null;
     const productName = productBibleData?.adminPanel?.productName || null;
+    console.log(`📦 Product Bible: profile=${activeProfileId}, linked=${!!productBibleData}, bible=${productBible ? `✅ (${productBible.length} chars, product: ${productName})` : '❌ none'}`);
 
     // Segment posts: viral (10k+ views) vs top performers (best available)
     const trulyViralPosts = allTopPosts.filter(m => m.views >= VIRAL_THRESHOLD);
@@ -1390,11 +1391,22 @@ Retourne UNIQUEMENT un objet JSON:
         }
     });
 
-    // Filter out recently used images in-memory (avoids a second DB query)
+    // Also add strictly forbidden images from last 3 posts (collected earlier)
+    const strictlyForbiddenIds = new Set<string>(last3PostsImageIds);
+
+    // Filter out recently used images in-memory
     let images = allImages.filter(img => !usedImageIds.has(img.id));
 
-    // If exclusion removed too many images, relax: allow all images
+    // If exclusion removed too many images, relax to soft mode:
+    // allow images from posts 4-5 but KEEP strict exclusion (last 3 posts)
     if (images.length < slides.length * 2) {
+        console.log(`⚠️ Image exclusion too aggressive (${images.length} remaining for ${slides.length} slides), relaxing to strict-only mode`);
+        images = allImages.filter(img => !strictlyForbiddenIds.has(img.id));
+    }
+
+    // If STILL not enough (very small image library), allow all as last resort
+    if (images.length < slides.length) {
+        console.log(`⚠️ Still not enough images (${images.length}), allowing all images`);
         images = allImages;
     }
 
