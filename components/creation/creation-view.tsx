@@ -117,6 +117,9 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [slidesBeforeImprove, setSlidesBeforeImprove] = useState<Slide[] | null>(null);
     const [generationPhase, setGenerationPhase] = useState<'idle' | 'generating' | 'scoring' | 'improving'>('idle');
     const [showConfirmSave, setShowConfirmSave] = useState(false);
+    const [isManualHook, setIsManualHook] = useState(false);
+    const [manualHookText, setManualHookText] = useState('');
+    const [customInstructions, setCustomInstructions] = useState('');
     const inlineConfigRef = useRef<HTMLDivElement>(null);
     // slidesPreviewRef removed — Twemoji now renders as React JSX, no DOM mutation needed
 
@@ -909,7 +912,12 @@ export function CreationView({ initialPost }: CreationViewProps) {
     };
 
     const handleGenerateCarousel = () => {
-        if (!selectedHook) return;
+        // Support both modes: selected hook (AI) or manual hook text
+        const hookText = isManualHook ? manualHookText.trim() : selectedHook?.hook;
+        if (!hookText) {
+            toast.error(isManualHook ? "Veuillez écrire votre hook" : "Veuillez sélectionner un hook");
+            return;
+        }
         if (!selectedCollectionId) {
             toast.error("Veuillez sélectionner une collection d'images pour continuer");
             return;
@@ -917,7 +925,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
         startCarouselTransition(async () => {
             // Phase 1: Generate carousel (slides + images)
             setGenerationPhase('generating');
-            const result = await generateCarousel(selectedHook.hook, selectedCollectionId);
+            const instructions = customInstructions.trim() || undefined;
+            const result = await generateCarousel(hookText, selectedCollectionId, undefined, instructions);
             if (result.error) {
                 toast.error(result.error);
                 setGenerationPhase('idle');
@@ -935,7 +944,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
             // Phase 2: Auto-score (predictive analysis)
             setGenerationPhase('scoring');
             try {
-                const scoreRes = await scoreCarouselBeforePublish(selectedHook.hook, result.slides);
+                const scoreRes = await scoreCarouselBeforePublish(hookText, result.slides);
 
                 if (scoreRes.success && scoreRes.score) {
                     setPredictiveScore(scoreRes.score);
@@ -1530,6 +1539,15 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                     <Button
                                         size="lg"
                                         variant="outline"
+                                        onClick={() => { setIsManualHook(!isManualHook); setSelectedHook(null); }}
+                                        className={`gap-3 text-base md:text-lg h-14 md:h-16 px-6 rounded-2xl border-2 transition-all duration-300 hover:scale-105 w-full md:w-auto ${isManualHook ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted/50'}`}
+                                    >
+                                        <FileText className="w-5 h-5 md:w-6 md:h-6" />
+                                        Écrire mon hook
+                                    </Button>
+                                    <Button
+                                        size="lg"
+                                        variant="outline"
                                         onClick={() => setIsCopyModalOpen(true)}
                                         className="gap-3 text-base md:text-lg h-14 md:h-16 px-6 rounded-2xl border-2 hover:bg-muted/50 transition-all duration-300 hover:scale-105 w-full md:w-auto"
                                     >
@@ -1538,7 +1556,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                     </Button>
                                 </div>
                                 <p className="text-sm text-muted-foreground/70 text-center px-4">
-                                    L'IA va analyser les tendances et te proposer des angles viraux
+                                    {isManualHook ? 'Écris ton hook et ajoute des consignes si besoin' : "L'IA va analyser les tendances et te proposer des angles viraux"}
                                 </p>
                             </div>
                         </CardContent>
@@ -1666,12 +1684,70 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     )
                 }
 
-                {/* Inline Config - shown when a hook is selected */}
-                {selectedHook && (
+                {/* Manual Hook Mode — write your own hook + custom instructions */}
+                {isManualHook && (
+                    <div ref={inlineConfigRef} className="animate-in fade-in slide-in-from-top-4 duration-500 max-w-lg mx-auto">
+                        <Card className="p-4 sm:p-5 space-y-4 border-primary/30 bg-card/60 backdrop-blur">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">Ton hook</label>
+                                <textarea
+                                    value={manualHookText}
+                                    onChange={(e) => setManualHookText(e.target.value)}
+                                    placeholder="Écris le hook de ton post ici…"
+                                    className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[80px] resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">Consignes personnalisées <span className="text-muted-foreground/50">(optionnel)</span></label>
+                                <textarea
+                                    value={customInstructions}
+                                    onChange={(e) => setCustomInstructions(e.target.value)}
+                                    placeholder="Ex: Utilise un ton plus agressif, parle de mon programme à 497€, ajoute des stats chiffrées…"
+                                    className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">Source des images</label>
+                                <select
+                                    value={selectedCollectionId}
+                                    onChange={(e) => setSelectedCollectionId(e.target.value)}
+                                    className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="" disabled>-- Collection --</option>
+                                    <option value="all">Toutes mes images</option>
+                                    {collections.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name} ({c._count?.images || 0})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <Button className="w-full" onClick={handleGenerateCarousel} disabled={isGeneratingCarousel || !manualHookText.trim()}>
+                                {isGeneratingCarousel ? (
+                                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    {generationPhase === 'scoring' ? 'Analyse predictive...' :
+                                     'Generation...'}</>
+                                ) : (
+                                    <><Sparkles className="mr-2 h-4 w-4" />Generer le Carrousel</>
+                                )}
+                            </Button>
+                        </Card>
+                    </div>
+                )}
+
+                {/* Inline Config - shown when a hook is selected (AI mode) */}
+                {!isManualHook && selectedHook && (
                     <div ref={inlineConfigRef} className="animate-in fade-in slide-in-from-top-2 duration-300 max-w-lg mx-auto">
                         <Card className="p-4 sm:p-5 space-y-4 border-primary/30 bg-card/60 backdrop-blur">
                             <div className="text-sm text-muted-foreground text-center truncate px-2">
                                 <span className="font-medium text-foreground">"{selectedHook.hook}"</span>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-muted-foreground">Consignes personnalisées <span className="text-muted-foreground/50">(optionnel)</span></label>
+                                <textarea
+                                    value={customInstructions}
+                                    onChange={(e) => setCustomInstructions(e.target.value)}
+                                    placeholder="Ex: Utilise un ton plus agressif, parle de mon programme à 497€…"
+                                    className="flex w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[50px] resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                                />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-xs font-medium text-muted-foreground">Source des images</label>
@@ -1691,7 +1767,6 @@ export function CreationView({ initialPost }: CreationViewProps) {
                                 {isGeneratingCarousel ? (
                                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                     {generationPhase === 'scoring' ? 'Analyse predictive...' :
-                                     generationPhase === 'improving' ? 'Optimisation...' :
                                      'Generation...'}</>
                                 ) : (
                                     <><Sparkles className="mr-2 h-4 w-4" />Generer le Carrousel</>

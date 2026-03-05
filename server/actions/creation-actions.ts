@@ -755,7 +755,7 @@ FORMAT JSON (objet seul, PAS un tableau) :
     }
 }
 
-export async function generateCarousel(hook: string, collectionId?: string, userId?: string) {
+export async function generateCarousel(hook: string, collectionId?: string, userId?: string, customInstructions?: string) {
     // If userId is provided (API), use it. Otherwise, get from session (UI)
     let finalUserId: string;
     if (userId) {
@@ -1254,6 +1254,7 @@ ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien f
 - INTERDIT: le caractère flèche '→'
 ${narrativeContext}
 ${uniquenessContext}
+${customInstructions ? `\n--- CONSIGNES PERSONNALISÉES DE L'UTILISATEUR ---\nRespecte impérativement ces consignes supplémentaires données par le créateur :\n${customInstructions}\n---` : ''}
 
 --- FORMAT DE SORTIE ---
 Retourne UNIQUEMENT un objet JSON:
