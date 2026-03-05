@@ -1923,10 +1923,10 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     >
                         Annuler
                     </Button>
-                    {!initialPost && (
+                    {(!initialPost || initialPost.status === 'draft') && (
                         <Button variant="outline" onClick={() => handleSave(true)} disabled={isSaving} className="flex-1 md:flex-none">
                             <FileText className="mr-2 h-4 w-4" />
-                            <span className="truncate">Sauvegarder Brouillon</span>
+                            <span className="truncate">{initialPost ? 'Mettre à jour Brouillon' : 'Sauvegarder Brouillon'}</span>
                         </Button>
                     )}
                     <Button onClick={() => initialPost ? handleSave(false) : setShowConfirmSave(true)} disabled={isSaving} className="bg-secondary text-white hover:bg-secondary/90 flex-1 md:flex-none">
