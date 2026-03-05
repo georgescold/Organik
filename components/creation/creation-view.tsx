@@ -639,6 +639,8 @@ export function CreationView({ initialPost }: CreationViewProps) {
     const [pickingSlideIndex, setPickingSlideIndex] = useState<number | null>(null);
     const [userImages, setUserImages] = useState<any[]>([]);
     const [isLoadingImages, setIsLoadingImages] = useState(false);
+    const [pickerCollectionId, setPickerCollectionId] = useState<string>('all');
+    const [pickerSearch, setPickerSearch] = useState('');
 
     const loadDrafts = async () => {
         const [draftsRes, ideasRes, collectionsRes] = await Promise.all([getDrafts(), getSavedIdeas(), getUserCollections()]);
@@ -757,19 +759,29 @@ export function CreationView({ initialPost }: CreationViewProps) {
         return temp.innerHTML;
     }, [twemojiReady]);
 
+    const loadPickerImages = async (collectionId: string) => {
+        setIsLoadingImages(true);
+        const res = await getUserImages(collectionId === 'all' ? undefined : collectionId, 1, 500);
+        if (res.success && res.images) {
+            setUserImages(res.images);
+        } else {
+            toast.error("Impossible de charger vos images");
+        }
+        setIsLoadingImages(false);
+    };
+
     const handleOpenImagePicker = async (index: number) => {
         setPickingSlideIndex(index);
         setIsImagePickerOpen(true);
+        setPickerSearch('');
         if (userImages.length === 0) {
-            setIsLoadingImages(true);
-            const res = await getUserImages();
-            if (res.success && res.images) {
-                setUserImages(res.images);
-            } else {
-                toast.error("Impossible de charger vos images");
-            }
-            setIsLoadingImages(false);
+            await loadPickerImages(pickerCollectionId);
         }
+    };
+
+    const handlePickerCollectionChange = async (collectionId: string) => {
+        setPickerCollectionId(collectionId);
+        await loadPickerImages(collectionId);
     };
 
     const handleSelectImage = (image: any) => {
@@ -2149,36 +2161,69 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         </DialogDescription>
                     </DialogHeader>
 
+                    {/* Filters: collection + search */}
+                    <div className="flex flex-col sm:flex-row gap-2 px-1">
+                        <select
+                            value={pickerCollectionId}
+                            onChange={(e) => handlePickerCollectionChange(e.target.value)}
+                            className="flex h-9 rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring sm:w-56"
+                        >
+                            <option value="all">Toutes les collections</option>
+                            {collections.map(c => (
+                                <option key={c.id} value={c.id}>{c.name} ({c._count?.images || 0})</option>
+                            ))}
+                        </select>
+                        <Input
+                            placeholder="Rechercher par nom ou description…"
+                            value={pickerSearch}
+                            onChange={(e) => setPickerSearch(e.target.value)}
+                            className="h-9 flex-1"
+                        />
+                    </div>
+
                     <div className="flex-1 overflow-y-auto min-h-[300px] p-2">
                         {isLoadingImages ? (
                             <div className="flex justify-center items-center h-full">
                                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                             </div>
-                        ) : userImages.length > 0 ? (
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                                {userImages.map((img) => (
-                                    <div
-                                        key={img.id}
-                                        className="relative aspect-[9/16] cursor-pointer group rounded-lg overflow-hidden border border-border/50 hover:border-primary transition-all"
-                                        onClick={() => handleSelectImage(img)}
-                                    >
-                                        <img
-                                            src={img.storageUrl}
-                                            alt={img.descriptionLong || "Image"}
-                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                        />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                            <Check className="w-8 h-8 text-white drop-shadow-lg" />
+                        ) : (() => {
+                            const searchLower = pickerSearch.toLowerCase().trim();
+                            const filtered = searchLower
+                                ? userImages.filter(img =>
+                                    (img.humanId || '').toLowerCase().includes(searchLower) ||
+                                    (img.descriptionLong || '').toLowerCase().includes(searchLower) ||
+                                    (Array.isArray(img.keywords) ? img.keywords : []).some((kw: string) => kw.toLowerCase().includes(searchLower))
+                                )
+                                : userImages;
+                            return filtered.length > 0 ? (
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                                    {filtered.map((img) => (
+                                        <div
+                                            key={img.id}
+                                            className="relative aspect-[9/16] cursor-pointer group rounded-lg overflow-hidden border border-border/50 hover:border-primary transition-all"
+                                            onClick={() => handleSelectImage(img)}
+                                        >
+                                            <img
+                                                src={img.storageUrl}
+                                                alt={img.descriptionLong || "Image"}
+                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                            />
+                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <Check className="w-8 h-8 text-white drop-shadow-lg" />
+                                            </div>
+                                            <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-2 pt-6">
+                                                <p className="text-[10px] font-semibold text-white truncate">{img.humanId}</p>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
-                                <ImageIcon className="w-12 h-12 opacity-20" />
-                                <p>Aucune image trouvée dans votre collection.</p>
-                            </div>
-                        )}
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
+                                    <ImageIcon className="w-12 h-12 opacity-20" />
+                                    <p>{pickerSearch ? 'Aucune image ne correspond à votre recherche.' : 'Aucune image trouvée dans cette collection.'}</p>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </DialogContent>
             </Dialog>
