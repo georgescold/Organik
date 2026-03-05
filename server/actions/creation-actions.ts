@@ -1365,7 +1365,7 @@ Retourne UNIQUEMENT un objet JSON:
         prisma.post.findMany({
             where: { userId: finalUserId },
             orderBy: { createdAt: 'desc' },
-            take: 5, // 5 derniers posts seulement pour l'exclusion
+            take: 50, // Fetch enough posts for frequency tracking + exclusion
             select: { slides: true }
         }),
         prisma.image.findMany({
@@ -1379,12 +1379,17 @@ Retourne UNIQUEMENT un objet JSON:
         })
     ]);
 
-    const usedImageIds = new Set<string>();
-    lastPosts.forEach(p => {
+    // Build image usage frequency map across ALL fetched posts
+    const imageUsageCount = new Map<string, number>();
+    const recentUsedImageIds = new Set<string>(); // Last 20 posts — soft exclusion
+    lastPosts.forEach((p, idx) => {
         try {
             const s = JSON.parse(p.slides || '[]') as Slide[];
             s.forEach(slide => {
-                if (slide.image_id) usedImageIds.add(slide.image_id);
+                if (slide.image_id) {
+                    imageUsageCount.set(slide.image_id, (imageUsageCount.get(slide.image_id) || 0) + 1);
+                    if (idx < 20) recentUsedImageIds.add(slide.image_id); // Last 20 posts
+                }
             });
         } catch (e) {
             // ignore
@@ -1394,17 +1399,19 @@ Retourne UNIQUEMENT un objet JSON:
     // Also add strictly forbidden images from last 3 posts (collected earlier)
     const strictlyForbiddenIds = new Set<string>(last3PostsImageIds);
 
-    // Filter out recently used images in-memory
-    let images = allImages.filter(img => !usedImageIds.has(img.id));
+    console.log(`🖼️ Image diversity: ${allImages.length} total, ${strictlyForbiddenIds.size} strictly forbidden, ${recentUsedImageIds.size} recently used (last 20 posts), ${imageUsageCount.size} tracked in frequency map`);
 
-    // If exclusion removed too many images, relax to soft mode:
-    // allow images from posts 4-5 but KEEP strict exclusion (last 3 posts)
+    // 3-tier exclusion: strict → recent → all
+    // Tier 1: Exclude images from last 20 posts (strong diversity)
+    let images = allImages.filter(img => !recentUsedImageIds.has(img.id));
+
+    // Tier 2: If too aggressive, only exclude last 3 posts (strict forbidden)
     if (images.length < slides.length * 2) {
         console.log(`⚠️ Image exclusion too aggressive (${images.length} remaining for ${slides.length} slides), relaxing to strict-only mode`);
         images = allImages.filter(img => !strictlyForbiddenIds.has(img.id));
     }
 
-    // If STILL not enough (very small image library), allow all as last resort
+    // Tier 3: If STILL not enough (very small image library), allow all as last resort
     if (images.length < slides.length) {
         console.log(`⚠️ Still not enough images (${images.length}), allowing all images`);
         images = allImages;
@@ -1493,18 +1500,26 @@ Retourne UNIQUEMENT un objet JSON:
             });
 
             const quality = img.qualityScore ?? 5;
-            // Relevance-first: quality is a very minor additive bonus
-            const combined = relevance + (quality / 10);
 
-            return { ...img, _relevance: relevance, _quality: quality, _score: combined, _mood: (img.mood || 'unknown').toLowerCase(), _style: (img.style || 'unknown').toLowerCase() };
+            // Frequency penalty: heavily penalize images used many times
+            const usageCount = imageUsageCount.get(img.id) || 0;
+            const frequencyPenalty = usageCount * 2; // -2 points per past usage
+
+            // Random jitter: add slight randomness so different images surface each time
+            const jitter = Math.random() * 3; // 0-3 random bonus
+
+            // Combined score: relevance + quality bonus - frequency penalty + jitter
+            const combined = relevance + (quality / 10) - frequencyPenalty + jitter;
+
+            return { ...img, _relevance: relevance, _quality: quality, _score: combined, _usageCount: usageCount, _mood: (img.mood || 'unknown').toLowerCase(), _style: (img.style || 'unknown').toLowerCase() };
         });
 
-        // Sort by score, take top 80 (all mood-compatible, relevance-ranked)
+        // Sort by score, take top 80 (all mood-compatible, relevance-ranked, diversity-boosted)
         scored.sort((a, b) => b._score - a._score);
         const candidateImages = scored.slice(0, 80);
 
         const imagesText = candidateImages.map(i =>
-            `ID: ${i.id} | Quality: ${i.qualityScore ?? 5}/10 | Desc: ${i.descriptionLong} | Keywords: ${i.keywords} | Mood: ${i.mood || 'N/A'} | Style: ${i.style || 'N/A'} | Colors: ${i.colors || 'N/A'}`
+            `ID: ${i.id} | Quality: ${i.qualityScore ?? 5}/10 | Used: ${i._usageCount}x | Desc: ${i.descriptionLong} | Keywords: ${i.keywords} | Mood: ${i.mood || 'N/A'} | Style: ${i.style || 'N/A'} | Colors: ${i.colors || 'N/A'}`
         ).join('\n---\n');
 
         const matchingPrompt = `You are a visual director for viral TikTok carousels. Match the BEST image to each slide.
@@ -1527,6 +1542,7 @@ MATCHING CRITERIA (in order of priority):
 
 CONSTRAINTS:
 - Each slide MUST have a UNIQUE image ID. NO duplicates.
+- **FRESHNESS PRIORITY**: Each image has a "Used: Nx" count. STRONGLY prefer images with Used: 0x (never used) over those already used multiple times. Only pick a frequently-used image if it's a MUCH better emotional/content match.
 - If no image fits well, pick the least-bad option — NEVER leave a slide without an image.
 
 Return ONLY a JSON object: { "1": "image-id", "2": "image-id", ... }
