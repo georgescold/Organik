@@ -196,7 +196,12 @@ ${convertedExamples.map(p => `  ✅ "${p.hookText?.slice(0, 60) || '?'}" — ${p
 `;
     }).join('\n');
 
-    // 5. Build the prompt
+    // 5. Log product bible context
+    const productBibleLength = panel.productBible?.length || 0;
+    const productBibleSent = Math.min(productBibleLength, 15000);
+    console.log(`📦 Product Bible: ${productBibleLength} chars total, ${productBibleSent} chars sent to AI (${productBibleLength > 15000 ? 'truncated' : 'full'})`);
+
+    // 6. Build the prompt
     const prompt = `Tu es un stratège marketing TikTok expert spécialisé dans le placement de produit organique. Analyse l'ensemble des comptes TikTok qui marketent un produit et fournis un rapport stratégique complet EN FRANÇAIS.
 
 ## PRODUIT
@@ -204,7 +209,7 @@ ${convertedExamples.map(p => `  ✅ "${p.hookText?.slice(0, 60) || '?'}" — ${p
 - URL: ${panel.productUrl || 'Non défini'}
 - Audience cible: ${panel.targetAudience || 'Non définie'}
 - Positionnement: ${panel.positioning || 'Non défini'}
-${panel.productBible ? `\n### Product Bible (résumé):\n${panel.productBible.slice(0, 2000)}${panel.productBible.length > 2000 ? '\n[...tronqué...]' : ''}` : ''}
+${panel.productBible ? `\n### Product Bible:\n${panel.productBible.slice(0, 15000)}${panel.productBible.length > 15000 ? '\n[...tronqué à 15000 car...]' : ''}` : ''}
 
 ## COMPTES TIKTOK (${profiles.length} comptes)
 ${profileBlocks}
@@ -277,12 +282,12 @@ POUR LES suggestedAngles (3-5 par profil) :
 - Retourne UNIQUEMENT le JSON, rien d'autre.`;
 
     try {
-        // 6. Call Claude
+        // 7. Call Claude
         const anthropic = new Anthropic({ apiKey: anthropicApiKey });
 
         const message = await anthropic.messages.create({
             model: 'claude-sonnet-4-6',
-            max_tokens: 8192,
+            max_tokens: 16384,
             messages: [{
                 role: 'user',
                 content: [{ type: 'text' as const, text: prompt, cache_control: { type: 'ephemeral' as const } }]
@@ -321,7 +326,7 @@ POUR LES suggestedAngles (3-5 par profil) :
             }
         }
 
-        // 7. Add metadata
+        // 8. Add metadata
         const fullAnalysis: MacroAnalysisData = {
             ...analysis as MacroAnalysisData,
             metadata: {
@@ -331,7 +336,7 @@ POUR LES suggestedAngles (3-5 par profil) :
             }
         };
 
-        // 8. Cache in database
+        // 9. Cache in database
         await prisma.panelMacroAnalysis.upsert({
             where: { adminPanelId: panelId },
             create: {
