@@ -929,35 +929,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                 const scoreRes = await scoreCarouselBeforePublish(selectedHook.hook, result.slides);
 
                 if (scoreRes.success && scoreRes.score) {
-                    const score = scoreRes.score;
-
-                    // Phase 3: Auto-improve if score < 75 and improvements exist
-                    if (score.total < 75 && score.improvements?.length > 0) {
-                        setGenerationPhase('improving');
-                        const improveRes = await improveCarouselFromScore(
-                            selectedHook.hook,
-                            result.slides,
-                            score.improvements,
-                            score.scores
-                        );
-
-                        if (improveRes.success && improveRes.slides) {
-                            setSlides(improveRes.slides);
-
-                            // Re-score after improvement to show final score
-                            setGenerationPhase('scoring');
-                            const finalScoreRes = await scoreCarouselBeforePublish(selectedHook.hook, improveRes.slides);
-                            if (finalScoreRes.success && finalScoreRes.score) {
-                                setPredictiveScore(finalScoreRes.score);
-                            } else {
-                                setPredictiveScore(score); // fallback to pre-improvement score
-                            }
-                        } else {
-                            setPredictiveScore(score); // improvement failed, show original score
-                        }
-                    } else {
-                        setPredictiveScore(score); // score >= 75, no improvement needed
-                    }
+                    setPredictiveScore(scoreRes.score);
                 }
                 // If scoring failed entirely, just show slides without score
             } catch (e) {
