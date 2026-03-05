@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Brain, Loader2, RefreshCw, Target, TrendingUp, Users, Zap, ChevronDown, ChevronUp, ArrowUpRight, AlertTriangle, CheckCircle2, Clock, Sparkles } from 'lucide-react';
+import { Brain, Loader2, RefreshCw, Target, TrendingUp, Users, Zap, ChevronDown, ChevronUp, ArrowUpRight, AlertTriangle, CheckCircle2, Clock, Sparkles, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { runMacroAnalysis, getCachedMacroAnalysis } from '@/server/actions/admin-panel-actions';
 import { toast } from 'sonner';
@@ -313,6 +313,50 @@ export function PanelMacroAnalysis({ panelId }: PanelMacroAnalysisProps) {
                                                     ))}
                                                 </ul>
                                             </div>
+
+                                            {/* Suggested Angles (Post Ideas) */}
+                                            {profile.suggestedAngles && profile.suggestedAngles.length > 0 && (
+                                                <div>
+                                                    <p className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                                        <Lightbulb className="h-3.5 w-3.5" />
+                                                        Idées de Posts ({profile.suggestedAngles.length})
+                                                    </p>
+                                                    <div className="space-y-3">
+                                                        {profile.suggestedAngles.map((idea, i) => (
+                                                            <div key={i} className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/15">
+                                                                {/* Hook */}
+                                                                <p className="font-bold text-sm mb-2 leading-snug">
+                                                                    &ldquo;{idea.hook}&rdquo;
+                                                                </p>
+
+                                                                {/* Badges */}
+                                                                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
+                                                                        {idea.format}
+                                                                    </span>
+                                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                                        idea.viralPotential === 'high'
+                                                                            ? 'bg-emerald-500/10 text-emerald-500'
+                                                                            : 'bg-muted/50 text-muted-foreground'
+                                                                    }`}>
+                                                                        {idea.viralPotential === 'high' ? 'Potentiel viral fort' : 'Potentiel modéré'}
+                                                                    </span>
+                                                                </div>
+
+                                                                {/* Angle */}
+                                                                <p className="text-xs text-muted-foreground mb-1.5">
+                                                                    <span className="font-bold text-foreground/80">Angle :</span> {idea.angle}
+                                                                </p>
+
+                                                                {/* Product mention */}
+                                                                <p className="text-xs text-muted-foreground">
+                                                                    <span className="font-bold text-foreground/80">Produit :</span> {idea.productMention}
+                                                                </p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

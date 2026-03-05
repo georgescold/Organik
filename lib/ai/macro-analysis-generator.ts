@@ -20,6 +20,13 @@ export interface MacroAnalysisData {
         strengths: string[];
         weaknesses: string[];
         recommendations: string[];
+        suggestedAngles: {
+            hook: string;           // Accroche prête à l'emploi, dans le style du compte
+            angle: string;          // L'angle émotionnel / la façon d'amener vers le produit
+            format: string;         // Format recommandé (ex: "carrousel 7 slides")
+            productMention: string; // Comment/où intégrer le produit naturellement
+            viralPotential: 'high' | 'medium';
+        }[];
     }[];
     crossProfileComparison: {
         bestConverter: string;
@@ -209,6 +216,7 @@ Analyse ces données en profondeur et produis un rapport structuré JSON. Croise
 3. Les patterns de conversion (hooks, angles, formats)
 4. Les forces/faiblesses de chaque compte par rapport au produit
 5. Un plan d'action concret
+6. **Des idées de posts (angles marketing) adaptées à chaque compte**
 
 Retourne UNIQUEMENT le JSON suivant:
 
@@ -227,7 +235,16 @@ Retourne UNIQUEMENT le JSON suivant:
       "conversionRate": <number>,
       "strengths": ["force 1", "force 2"],
       "weaknesses": ["faiblesse 1", "faiblesse 2"],
-      "recommendations": ["reco 1", "reco 2"]
+      "recommendations": ["reco 1", "reco 2"],
+      "suggestedAngles": [
+        {
+          "hook": "Accroche prête à poster, dans le style d'écriture exact du compte",
+          "angle": "L'angle émotionnel : comment ce post amène subtilement vers le produit",
+          "format": "Carrousel 7 slides / Storytelling / Liste / etc.",
+          "productMention": "Comment et où mentionner le produit naturellement dans ce post",
+          "viralPotential": "high"
+        }
+      ]
     }
   ],
   "crossProfileComparison": {
@@ -249,6 +266,14 @@ IMPORTANT:
 - Chaque recommandation doit être concrète et actionnable, pas vague.
 - L'alignmentScore reflète comment le contenu du compte s'aligne avec le Product Bible.
 - Si aucun post converti, base-toi sur l'engagement et la pertinence.
+
+POUR LES suggestedAngles (3-5 par profil) :
+- Le "hook" doit être écrit EXACTEMENT dans le style du compte (ton, vocabulaire, tics de langage). Si le compte est anonyme et provocateur, le hook doit l'être aussi. Si le compte est personnel et inspirant, idem.
+- L'"angle" décrit la dynamique émotionnelle : comment le contenu mène naturellement le prospect vers le produit SANS vendre frontalement. Angle ≠ produit. L'angle = l'émotion, la curiosité, le besoin que le post crée.
+- Le "format" doit correspondre à ce qui performe le mieux pour ce compte (basé sur les données).
+- "productMention" explique précisément où et comment glisser le produit (slide X, en réponse commentaire, lien bio, dernière slide, etc.)
+- "viralPotential": "high" si le hook exploite des triggers viraux connus du compte, "medium" sinon.
+- VARIER les angles : ne pas répéter le même type d'approche.
 - Retourne UNIQUEMENT le JSON, rien d'autre.`;
 
     try {
@@ -257,7 +282,7 @@ IMPORTANT:
 
         const message = await anthropic.messages.create({
             model: 'claude-sonnet-4-6',
-            max_tokens: 4096,
+            max_tokens: 6000,
             messages: [{
                 role: 'user',
                 content: [{ type: 'text' as const, text: prompt, cache_control: { type: 'ephemeral' as const } }]
