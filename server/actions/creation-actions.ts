@@ -853,22 +853,34 @@ export async function generateCarousel(hook: string, collectionId?: string, user
         } catch { /* ignore parse errors */ }
     });
 
+    // Collect hooks already used from recent posts for diversity
+    const existingHooks: string[] = existingPosts
+        .map(p => p.hookText?.trim())
+        .filter((h): h is string => !!h && h.length > 5);
+
     const uniquenessContext = (() => {
         let ctx = '';
 
-        // STRICT: last 3 posts — absolutely no reuse (text OR images)
+        // STRICT: last 5 posts — absolutely no reuse (text OR images)
         if (last3PostsSlideTexts.length > 0) {
-            ctx += `\n🚫 INTERDICTION ABSOLUE — SLIDES DES 3 DERNIERS POSTS (ne JAMAIS réutiliser, même reformulé):
+            ctx += `\n🚫 INTERDICTION ABSOLUE — SLIDES DES DERNIERS POSTS (ne JAMAIS réutiliser, même reformulé):
 ${last3PostsSlideTexts.map(t => `  ✗ "${t}"`).join('\n')}
-Ces textes viennent des 3 derniers posts créés. Chaque nouveau post DOIT avoir un contenu 100% différent pour éviter la répétition visuelle et textuelle.\n`;
+`;
         }
 
-        // SOFT: all other existing texts — avoid duplication (limited to 20 for token efficiency)
+        // HOOKS ALREADY USED — prevent same angles/topics from repeating
+        if (existingHooks.length > 0) {
+            ctx += `\n🚫 HOOKS/SUJETS DÉJÀ TRAITÉS (ne JAMAIS refaire le même angle ou sujet):
+${existingHooks.slice(0, 30).map(h => `  ✗ "${h}"`).join('\n')}
+Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Pas de reformulation, pas de synonymes, pas le même sujet sous un autre titre. Change de THÈME, de PERSPECTIVE, d'ÉMOTION.\n`;
+        }
+
+        // SOFT: all other existing slide texts — avoid duplication (limited to 40 for better coverage)
         const olderTexts = existingSlideTexts.filter(t => !last3PostsSlideTexts.includes(t));
         if (olderTexts.length > 0) {
-            ctx += `\n⚠️ TEXTES DÉJÀ UTILISÉS (évite de les réutiliser):
-${olderTexts.slice(0, 20).map(t => `  - "${t}"`).join('\n')}
-Génère du contenu ORIGINAL. Chaque slide doit apporter une perspective ou formulation NOUVELLE.\n`;
+            ctx += `\n⚠️ TEXTES DÉJÀ UTILISÉS DANS DES SLIDES (interdit de les réutiliser ou paraphraser):
+${olderTexts.slice(0, 40).map(t => `  - "${t}"`).join('\n')}
+Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAIS VUE dans les posts précédents. Pas de paraphrase, pas de reformulation — du contenu 100% NEUF.\n`;
         }
 
         return ctx;
@@ -1268,16 +1280,38 @@ ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien f
 - INTERDIT: le caractère flèche '→'
 ${narrativeContext}
 ${uniquenessContext}
-${productBible ? `\n--- PRODUCT BIBLE (PLACEMENT OBLIGATOIRE) ---
-Tu as accès à la base de connaissances complète du produit "${productName || 'le produit'}". Tu DOIS intégrer des références subtiles à ce produit dans CHAQUE carrousel généré.
+${productBible ? `\n--- PRODUCT BIBLE (INTÉGRATION NATURELLE) ---
+Produit: "${productName || 'le produit'}"
 
-RÈGLES DE PLACEMENT OBLIGATOIRES:
-1. MINIMUM 2 RÉFÉRENCES OBLIGATOIRES: Tu DOIS placer AU MOINS 2 références subtiles au produit dans le carrousel. Ce n'est PAS optionnel — chaque post DOIT contenir exactement 2 mentions produit minimum.
-2. ESPACEMENT OBLIGATOIRE: Les 2 références doivent être ESPACÉES dans le carrousel. Elles ne doivent JAMAIS être sur la même slide ni sur 2 slides consécutives. Idéalement : 1 référence entre les slides 2-4 et 1 référence entre les slides 5-7 (ou dernière slide/CTA).
-3. SUBTILITÉ ABSOLUE: Le post reste un contenu de VALEUR avant tout. Chaque mention produit doit sembler être un exemple naturel, une anecdote, une recommandation organique — JAMAIS une publicité. Le lecteur ne doit PAS sentir qu'on lui vend quelque chose.
-4. INTÉGRATION: Chaque mention doit s'intégrer dans le flow du texte comme un EXEMPLE concret, une RECOMMANDATION naturelle, ou une ILLUSTRATION du propos. Jamais en rupture de ton.
-5. VOCABULAIRE: Utilise le vocabulaire et les termes spécifiques du produit décrits dans le bible ci-dessous pour que les mentions sonnent authentiques.
-6. CTA: La 2ème référence PEUT être dans la dernière slide/CTA avec une mention légèrement plus directe (lien bio, recommandation, etc.) mais toujours dans le style du créateur.
+Tu DOIS intégrer 2 références au produit dans le carrousel. Ces 2 références sont RADICALEMENT DIFFÉRENTES l'une de l'autre :
+
+═══ RÉFÉRENCE 1 : INTÉGRÉE DANS LE CONTENU (slide 2-5) ═══
+Le produit apparaît comme une SOLUTION NATURELLE au problème/émotion soulevé par le post.
+Il est TISSÉ dans l'argumentaire — le lecteur ne doit PAS percevoir de rupture.
+
+✅ BON (intégré naturellement dans le propos) :
+- "Et c'est exactement pour ça que [concept du produit] change tout — parce que ça te force à comprendre [bénéfice] au lieu de rester dans le flou"
+- "Perso ce qui m'a aidée à débloquer ça c'est quand j'ai compris [insight lié au produit]... et tout a changé"
+- "La vraie question c'est pas 'est-ce qu'il t'aime' mais 'est-ce que tu te connais assez pour le voir'... [transition naturelle vers le concept du produit]"
+
+❌ MAUVAIS (plaqué, déconnecté, publicité visible) :
+- "D'ailleurs j'ai découvert [produit] trop bien, je l'ai mis en bio"
+- "En parlant de ça, il existe [produit] qui..."
+- "Si tu veux aller plus loin, teste [produit]"
+- Tout paragraphe séparé qui commence par "D'ailleurs", "Au fait", "En passant"
+
+La mention doit être DANS le flux de la pensée, comme si le produit faisait naturellement partie du raisonnement.
+
+═══ RÉFÉRENCE 2 : CTA DIRECT (dernière slide uniquement) ═══
+Ici et SEULEMENT ici, tu peux être plus direct : lien en bio, "j'ai mis X en bio", "le lien est en bio si ça t'intéresse".
+Ce CTA doit rester dans le TON du créateur.
+
+═══ RÈGLES STRICTES ═══
+- Les 2 références DOIVENT être espacées d'au moins 2 slides
+- La référence 1 ne doit JAMAIS ressembler à un paragraphe publicitaire ajouté après coup
+- La référence 1 doit être une CONTINUATION LOGIQUE de l'argument de la slide
+- JAMAIS de "D'ailleurs", "Au passage", "En parlant de ça" pour introduire le produit
+- Le produit est présenté comme un OUTIL/SOLUTION que le créateur utilise naturellement, pas comme une recommandation externe
 
 PRODUCT BIBLE:
 ${productBible}

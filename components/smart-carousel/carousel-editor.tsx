@@ -352,7 +352,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
             textAlign: d?.textAlign ?? 'center',
             color: d?.color ?? '#ffffff',
             outlineColor: d?.outlineColor ?? '#000000',
-            outlineWidth: d?.outlineWidth ?? 1.25,
+            outlineWidth: d?.outlineWidth ?? 1.5,
             lineHeight: d?.lineHeight ?? 1.5,
             letterSpacing: d?.letterSpacing,
             maxWidth: d?.maxWidth ?? 300,
@@ -804,7 +804,7 @@ export function CarouselEditor({ slides: initialSlides, images, onSave, onBack }
                     }
 
                     const textMode = tl.textMode || 'outline';
-                    const outlineW = Math.round((tl.outlineWidth || 1.25) * scaleX);
+                    const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
 
                     // Caption mode: add gap between line boxes (matches preview gap: 4px)
                     const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
