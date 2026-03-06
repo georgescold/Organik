@@ -7,9 +7,9 @@ import { getActiveProfileId } from './profile-actions';
 import { getCachedInsights } from '@/lib/ai/insights-generator';
 import Anthropic from '@anthropic-ai/sdk';
 
-// Claude Sonnet 4.6 — best quality/cost ratio ($3/$15 per MTok vs Opus $15/$75)
+// Claude Sonnet 4.6  - best quality/cost ratio ($3/$15 per MTok vs Opus $15/$75)
 const MODEL = 'claude-sonnet-4-6';
-// Haiku — for trivial tasks (image-to-slide mapping) where Sonnet is overkill
+// Haiku  - for trivial tasks (image-to-slide mapping) where Sonnet is overkill
 const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 const VIRAL_THRESHOLD = 10000; // Posts with 10k+ views are considered truly viral
 
@@ -72,7 +72,7 @@ function extractJSON(raw: string): any {
     }
 
     if (end === -1) {
-        // Truncated JSON — try to repair by closing open structures
+        // Truncated JSON  - try to repair by closing open structures
         let repaired = cleaned.substring(start);
         // Remove trailing incomplete string (unterminated quote)
         repaired = repaired.replace(/,\s*"[^"]*$/, '');
@@ -108,7 +108,7 @@ async function getAnthropicClient(userId: string) {
     throw new Error("Clé API manquante. Veuillez configurer votre clé dans les réglages.");
 }
 
-// Retry wrapper for Anthropic API calls — handles 529 overloaded errors
+// Retry wrapper for Anthropic API calls  - handles 529 overloaded errors
 async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, baseDelay = 2000): Promise<T> {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
@@ -186,7 +186,7 @@ function computeLinguisticFingerprint(
     const periodCount = (allJoined.match(/(?<!\.)\.(?!\.)/g) || []).length;
     const commaCount = (allJoined.match(/,/g) || []).length;
     const colonCount = (allJoined.match(/:/g) || []).length;
-    const dashCount = (allJoined.match(/[—–-]/g) || []).length;
+    const dashCount = (allJoined.match(/[-–—]/g) || []).length;
 
     // ── ÉMOJIS ──
     const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{E0020}-\u{E007F}]/gu;
@@ -267,28 +267,28 @@ function computeLinguisticFingerprint(
     // ── BUILD FINGERPRINT ──
     let fp = `\n🔍 EMPREINTE LINGUISTIQUE DU CRÉATEUR (analysé sur ${allCreatorTexts.length} slides + ${allHooks.length} hooks + ${allDescriptions.length} descriptions):\n`;
 
-    fp += `\nPONCTUATION — ton profil:\n`;
+    fp += `\nPONCTUATION  - ton profil:\n`;
     fp += `  "..." (suspense): ${ellipsisCount}x | "?" (questions): ${questionCount}x | "!" (exclamations): ${exclamationCount}x\n`;
-    fp += `  "." (points simples): ${periodCount}x | "," (virgules): ${commaCount}x | ":" (deux-points): ${colonCount}x | "—/-" (tirets): ${dashCount}x\n`;
+    fp += `  "." (points simples): ${periodCount}x | "," (virgules): ${commaCount}x | ":" (deux-points): ${colonCount}x | " -/-" (tirets): ${dashCount}x\n`;
     if (ellipsisCount > questionCount && ellipsisCount > exclamationCount) {
-        fp += `  → Tu privilégies le SUSPENSE avec "..." — reproduis ce style.\n`;
+        fp += `  → Tu privilégies le SUSPENSE avec "..."  - reproduis ce style.\n`;
     } else if (questionCount > ellipsisCount) {
-        fp += `  → Tu poses beaucoup de QUESTIONS — reproduis ce style interrogatif.\n`;
+        fp += `  → Tu poses beaucoup de QUESTIONS  - reproduis ce style interrogatif.\n`;
     } else if (exclamationCount > ellipsisCount) {
-        fp += `  → Tu utilises beaucoup les EXCLAMATIONS — reproduis cette énergie.\n`;
+        fp += `  → Tu utilises beaucoup les EXCLAMATIONS  - reproduis cette énergie.\n`;
     }
 
     fp += `\nÉMOJIS:\n`;
     if (usesEmojisInSlides && topEmojis.length > 0) {
-        fp += `  Slides: OUI — tu utilises des émojis dans tes slides. Tes favoris: ${topEmojis.join(' ')}\n`;
+        fp += `  Slides: OUI  - tu utilises des émojis dans tes slides. Tes favoris: ${topEmojis.join(' ')}\n`;
         fp += `  → REPRODUIS cette utilisation d'émojis dans les nouvelles slides.\n`;
     } else {
-        fp += `  Slides: NON — tu n'utilises PAS d'émojis dans tes slides. N'EN AJOUTE PAS.\n`;
+        fp += `  Slides: NON  - tu n'utilises PAS d'émojis dans tes slides. N'EN AJOUTE PAS.\n`;
     }
     if (usesEmojisInDesc && topEmojis.length > 0) {
-        fp += `  Descriptions: OUI — tu utilises des émojis dans tes descriptions. Favoris: ${topEmojis.join(' ')}\n`;
+        fp += `  Descriptions: OUI  - tu utilises des émojis dans tes descriptions. Favoris: ${topEmojis.join(' ')}\n`;
     } else if (allDescriptions.length > 0) {
-        fp += `  Descriptions: NON — tu n'utilises PAS d'émojis dans tes descriptions.\n`;
+        fp += `  Descriptions: NON  - tu n'utilises PAS d'émojis dans tes descriptions.\n`;
     }
 
     if (usesAllCaps) {
@@ -368,12 +368,12 @@ function computeHookFingerprint(allHookTexts: string[]): string {
     let fp = `\nEMPREINTE LINGUISTIQUE DES HOOKS (${allHookTexts.length} hooks analysés):\n`;
     fp += `  Ponctuation: "..." ${ellipsis}x | "?" ${questions}x | "!" ${exclamations}x | Tutoiement: ${tuCount}x\n`;
     if (usesEmojis) {
-        fp += `  Émojis: OUI — favoris: ${topEmojis.join(' ')} → UTILISE-LES dans les hooks\n`;
+        fp += `  Émojis: OUI  - favoris: ${topEmojis.join(' ')} → UTILISE-LES dans les hooks\n`;
     } else {
-        fp += `  Émojis: NON — n'ajoute PAS d'émojis dans les hooks\n`;
+        fp += `  Émojis: NON  - n'ajoute PAS d'émojis dans les hooks\n`;
     }
     if (usesAllCaps) {
-        fp += `  Majuscules: OUI — pour l'emphase (ex: ${[...new Set(allCapsWords)].slice(0, 5).join(', ')})\n`;
+        fp += `  Majuscules: OUI  - pour l'emphase (ex: ${[...new Set(allCapsWords)].slice(0, 5).join(', ')})\n`;
     }
     if (tics.length > 0) {
         fp += `  Tics de langage: ${tics.map(t => `"${t.label}" (${t.count}x)`).join(', ')} → INTÈGRE-LES naturellement\n`;
@@ -424,7 +424,7 @@ export async function generateHooks() {
         })
     ]);
 
-    // 2. Segment Data — viral (10k+) with fallback to top 5
+    // 2. Segment Data  - viral (10k+) with fallback to top 5
     const trulyViralHooks = recentMetrics.filter(m => m.views >= VIRAL_THRESHOLD);
     const topHookPosts = trulyViralHooks.length >= 3 ? trulyViralHooks.slice(0, 10) : recentMetrics.slice(0, 10);
     const isViralHookData = trulyViralHooks.length >= 3;
@@ -435,7 +435,7 @@ export async function generateHooks() {
     const targetAudience = (profile as any)?.targetAudience || "General Audience";
     const niche = (profile as any)?.niche || "General Content";
 
-    // Deep hook analysis — not just listing, but understanding WHY they worked
+    // Deep hook analysis  - not just listing, but understanding WHY they worked
     const deepHookAnalysis = (() => {
         if (topHookPosts.length === 0) return 'Aucun post publié avec des vues. Utilise les meilleures pratiques.';
 
@@ -474,7 +474,7 @@ export async function generateHooks() {
         : "";
 
     const rejectedContext = rejectedPosts.length > 0
-        ? `❌ BLACKLIST — HOOKS STRICTEMENT INTERDITS (le créateur les a REJETÉS — ne propose JAMAIS rien de similaire):
+        ? `❌ BLACKLIST  - HOOKS STRICTEMENT INTERDITS (le créateur les a REJETÉS  - ne propose JAMAIS rien de similaire):
 ${rejectedPosts.map(p => `  - Angle BANNI: "${p.title}" | Hook BANNI: "${p.hookText}"`).join('\n')}
 CRITIQUE: Tout hook qui ressemble, paraphrase ou réutilise le même concept est STRICTEMENT INTERDIT.`
         : "";
@@ -515,49 +515,49 @@ CRITIQUE: Tout hook qui ressemble, paraphrase ou réutilise le même concept est
     const hookFingerprint = computeHookFingerprint(recentMetrics.map(m => m.post.hookText || '').filter(h => h.length > 0));
 
 
-    const systemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle — tu ES cette personne. Tu crées du contenu dans la niche "${niche}" et chaque hook que tu écris doit sonner exactement comme toi.
+    const systemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle  - tu ES cette personne. Tu crées du contenu dans la niche "${niche}" et chaque hook que tu écris doit sonner exactement comme toi.
 
 LANGUE: FRANCAIS natif uniquement. Tu tutoies. Direct, naturel, avec du punch.
-PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs ( -) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points.
 
 TON AUDIENCE: ${targetAudience}
 Tu sais ce qui les fait s'arreter de scroller. Tu connais leurs frustrations, leurs desirs, et les mots qui les captent en 2 secondes.
 
 ${'═'.repeat(50)}
-🧠 ANALYSE DE TES HOOKS — C'EST TA BASE
+🧠 ANALYSE DE TES HOOKS  - C'EST TA BASE
 ${'═'.repeat(50)}
 ${deepHookAnalysis}
 ${flopContext}
 ${insightsContext}
 ${hookFingerprint}
 
-OBJECTIF: Comprendre POURQUOI tes hooks ont performé, t'en INSPIRER, puis INNOVER. Tu ne recycles JAMAIS un hook existant — tu comprends les mécanismes qui ont fonctionné et tu crées quelque chose de NOUVEAU.
+OBJECTIF: Comprendre POURQUOI tes hooks ont performé, t'en INSPIRER, puis INNOVER. Tu ne recycles JAMAIS un hook existant  - tu comprends les mécanismes qui ont fonctionné et tu crées quelque chose de NOUVEAU.
 
 EMPREINTE À RESPECTER (c'est ce qui te rend reconnaissable):
-1. La LONGUEUR MOYENNE de tes hooks qui marchent — reste dans la même fourchette
-2. Les TECHNIQUES dominantes (suspense "...", questions "?", interpellation "tu") — utilise-les
-3. Le VOCABULAIRE, le TON et les TICS DE LANGAGE — écris comme le créateur, pas comme une IA
+1. La LONGUEUR MOYENNE de tes hooks qui marchent  - reste dans la même fourchette
+2. Les TECHNIQUES dominantes (suspense "...", questions "?", interpellation "tu")  - utilise-les
+3. Le VOCABULAIRE, le TON et les TICS DE LANGAGE  - écris comme le créateur, pas comme une IA
 4. ÉMOJIS: si le créateur en utilise dans ses hooks, utilise le même type. Sinon, N'EN AJOUTE PAS
 5. MAJUSCULES: reproduis l'usage (ou non-usage) du créateur
 
 CE QUI DOIT ÊTRE NOUVEAU:
 - L'ANGLE: chaque hook aborde un sujet ou une perspective différente
 - La FORMULATION: même technique (ex: question) mais tournure inédite
-- Comprends POURQUOI les flops ont floppé — fais le contraire
+- Comprends POURQUOI les flops ont floppé  - fais le contraire
 
 ${'═'.repeat(50)}
 📐 RÈGLES DE CRÉATION
 ${'═'.repeat(50)}
 
-PRIORITÉ 1 — STOPPER LE SCROLL:
+PRIORITÉ 1  - STOPPER LE SCROLL:
 Un hook a UN SEUL job: faire s'arrêter quelqu'un de scroller. Il doit déclencher une ÉMOTION en 2 secondes.
-Crée un "curiosity gap" — le lecteur A BESOIN d'en savoir plus mais ne peut pas deviner.
+Crée un "curiosity gap"  - le lecteur A BESOIN d'en savoir plus mais ne peut pas deviner.
 
-PRIORITÉ 2 — SONNER HUMAIN, PAS IA:
+PRIORITÉ 2  - SONNER HUMAIN, PAS IA:
 Écris comme ${authority} parlerait vraiment. Brut, direct, imparfait. "Tu" pas "vous".
 "..." pour le suspense. Phrases incomplètes. Punch, pas polish.
 
-PRIORITÉ 3 — LONGUEUR:
+PRIORITÉ 3  - LONGUEUR:
 Le hook sera affiché sur un slide 9:16. Il DOIT être lisible en 1-2 secondes.
 Maximum 70 caractères. Plus court = mieux.
 
@@ -580,8 +580,8 @@ ${'═'.repeat(50)}
 📤 TÂCHE
 ${'═'.repeat(50)}
 Génère exactement 3 hooks:
-- Hook 1 & 2: "OPTIMIZED" — basés sur ce qui fonctionne déjà pour ce créateur.
-- Hook 3: "WILDCARD" — un angle complètement différent pour tester du nouveau. Toujours dans le persona.
+- Hook 1 & 2: "OPTIMIZED"  - basés sur ce qui fonctionne déjà pour ce créateur.
+- Hook 3: "WILDCARD"  - un angle complètement différent pour tester du nouveau. Toujours dans le persona.
 
 FORMAT (JSON UNIQUEMENT):
 [
@@ -713,11 +713,11 @@ export async function generateReplacementHook(rejectedHook: HookProposal) {
     const hookFingerprint = computeHookFingerprint(hookTexts);
 
     const systemPrompt = `Tu es ${authority}. Tu parles à ${targetAudience}.${niche ? ` Ta niche: ${niche}.` : ''}
-PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Tirets courts (-) uniquement.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs ( -) ni de tirets moyens (–). Tirets courts (-) uniquement.
 
 Le créateur a REJETÉ ce hook : "${rejectedHook.hook}" (Angle: ${rejectedHook.angle})
 
-❌ BLACKLIST COMPLÈTE (TOUS les hooks rejetés — INTERDIT de proposer quoi que ce soit de similaire) :
+❌ BLACKLIST COMPLÈTE (TOUS les hooks rejetés  - INTERDIT de proposer quoi que ce soit de similaire) :
 ${blacklist || '(aucun)'}
 ${rejectedAnglesList}
 ${wildcardInstruction}
@@ -793,7 +793,7 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     // ✅ PERF: Parallelize profile + posts + existingSlides + insights + productBible queries
     const [profile, allTopPosts, existingPosts, narrativeInsights, productBibleData] = await Promise.all([
         prisma.profile.findUnique({ where: { id: activeProfileId } }),
-        // Fetch top 20 posts by views — we'll segment viral (10k+) vs best performers after
+        // Fetch top 20 posts by views  - we'll segment viral (10k+) vs best performers after
         prisma.metrics.findMany({
             where: {
                 post: { profileId: activeProfileId, status: { not: 'draft' } },
@@ -840,8 +840,8 @@ export async function generateCarousel(hook: string, collectionId?: string, user
 
     // Extract existing slide texts AND image_ids from recent posts
     const existingSlideTexts: string[] = [];
-    const last3PostsImageIds: string[] = []; // Images from last 3 posts — FORBIDDEN to reuse
-    const last3PostsSlideTexts: string[] = []; // Slide texts from last 3 posts — STRICTLY FORBIDDEN
+    const last3PostsImageIds: string[] = []; // Images from last 3 posts  - FORBIDDEN to reuse
+    const last3PostsSlideTexts: string[] = []; // Slide texts from last 3 posts  - STRICTLY FORBIDDEN
 
     existingPosts.forEach((p, idx) => {
         try {
@@ -867,26 +867,26 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     const uniquenessContext = (() => {
         let ctx = '';
 
-        // STRICT: last 5 posts — absolutely no reuse (text OR images)
+        // STRICT: last 5 posts  - absolutely no reuse (text OR images)
         if (last3PostsSlideTexts.length > 0) {
-            ctx += `\n🚫 INTERDICTION ABSOLUE — SLIDES DES DERNIERS POSTS (ne JAMAIS réutiliser, même reformulé):
+            ctx += `\n🚫 INTERDICTION ABSOLUE  - SLIDES DES DERNIERS POSTS (ne JAMAIS réutiliser, même reformulé):
 ${last3PostsSlideTexts.map(t => `  ✗ "${t}"`).join('\n')}
 `;
         }
 
-        // HOOKS ALREADY USED — prevent same angles/topics from repeating
+        // HOOKS ALREADY USED  - prevent same angles/topics from repeating
         if (existingHooks.length > 0) {
             ctx += `\n🚫 HOOKS/SUJETS DÉJÀ TRAITÉS (ne JAMAIS refaire le même angle ou sujet):
 ${existingHooks.slice(0, 30).map(h => `  ✗ "${h}"`).join('\n')}
 Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Pas de reformulation, pas de synonymes, pas le même sujet sous un autre titre. Change de THÈME, de PERSPECTIVE, d'ÉMOTION.\n`;
         }
 
-        // SOFT: all other existing slide texts — avoid duplication (limited to 40 for better coverage)
+        // SOFT: all other existing slide texts  - avoid duplication (limited to 40 for better coverage)
         const olderTexts = existingSlideTexts.filter(t => !last3PostsSlideTexts.includes(t));
         if (olderTexts.length > 0) {
             ctx += `\n⚠️ TEXTES DÉJÀ UTILISÉS DANS DES SLIDES (interdit de les réutiliser ou paraphraser):
 ${olderTexts.slice(0, 40).map(t => `  - "${t}"`).join('\n')}
-Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAIS VUE dans les posts précédents. Pas de paraphrase, pas de reformulation — du contenu 100% NEUF.\n`;
+Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAIS VUE dans les posts précédents. Pas de paraphrase, pas de reformulation  - du contenu 100% NEUF.\n`;
         }
 
         return ctx;
@@ -907,7 +907,7 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
     const authority = profile?.persona || "Expert Creator";
 
     // ═══════════════════════════════════════════════════════════════════
-    // DEEP VIRAL ANALYSIS — Extract patterns, structures, and techniques
+    // DEEP VIRAL ANALYSIS  - Extract patterns, structures, and techniques
     // ═══════════════════════════════════════════════════════════════════
 
     // 1. Description style examples
@@ -916,7 +916,7 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
            ${viralPosts.slice(0, 3).filter(p => p.post.description).map(p => `"${p.post.description}" (${p.views.toLocaleString()} views)`).join('\n           ')}`
         : "";
 
-    // 2. Deep viral slides analysis — not just text, but STRUCTURE, PATTERNS, TECHNIQUES
+    // 2. Deep viral slides analysis  - not just text, but STRUCTURE, PATTERNS, TECHNIQUES
     const deepViralAnalysis = (() => {
         if (viralPosts.length === 0) return '';
 
@@ -938,7 +938,7 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
         if (postsWithSlides.length === 0) return '';
 
         const viralLabel = isViralData ? '🔥 VIRAL' : '📈 TOP-PERFORMING';
-        let analysis = `\n${viralLabel} POSTS — DEEP ANALYSIS (${postsWithSlides.length} posts, ${isViralData ? '10k+ views each' : 'your best performers'}):\n`;
+        let analysis = `\n${viralLabel} POSTS  - DEEP ANALYSIS (${postsWithSlides.length} posts, ${isViralData ? '10k+ views each' : 'your best performers'}):\n`;
 
         // Per-post detailed breakdown
         for (const post of postsWithSlides) {
@@ -973,7 +973,7 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
         analysis += `- Longueur moyenne: ${avgWords} mots/slide\n`;
         analysis += `- Nombre de slides moyen: ${Math.round(postsWithSlides.reduce((sum, p) => sum + p.slides.length, 0) / postsWithSlides.length)}\n`;
 
-        // Extract common opening patterns (slide 2 — after hook)
+        // Extract common opening patterns (slide 2  - after hook)
         const secondSlides = postsWithSlides.filter(p => p.slides.length > 1).map(p => p.slides[1].text);
         if (secondSlides.length > 0) {
             analysis += `- Patterns d'ouverture (slide 2 après le hook): ${secondSlides.map(s => `"${s}"`).join(' | ')}\n`;
@@ -1020,7 +1020,7 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
         return parts.length > 0 ? `\n📊 INTELLIGENCE DE PERFORMANCE (basé sur ${narrativeInsights.metadata?.basedOnPostsCount || 0} posts analysés):\n${parts.join('\n')}` : '';
     })();
 
-    // 4. Linguistic fingerprint — use shared helper
+    // 4. Linguistic fingerprint  - use shared helper
     const linguisticFingerprint = (() => {
         let fp = computeLinguisticFingerprint(allTopPosts, existingPosts);
         if (!fp) return '';
@@ -1086,12 +1086,12 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
                 if (hasLineBreaks) {
                     fp += `    Sauts de ligne: OUI (${avgLineBreaks.toFixed(1)} en moyenne par slide)\n`;
                 } else {
-                    fp += `    Sauts de ligne: NON — tes slides body sont en texte continu\n`;
+                    fp += `    Sauts de ligne: NON  - tes slides body sont en texte continu\n`;
                 }
                 fp += `    → RESPECTE cette fourchette de ${minBodyChars}-${maxBodyChars} caractères pour les slides body.\n`;
             }
 
-            // CTA stats (CRITICAL — this is where the main issue is)
+            // CTA stats (CRITICAL  - this is where the main issue is)
             if (allCTAs.length > 0) {
                 const ctaChars = allCTAs.map(t => t.length);
                 const ctaWords = allCTAs.map(t => t.split(/\s+/).filter(Boolean).length);
@@ -1111,12 +1111,12 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
                 fp += `    Caractères: ${avgCtaChars} en moyenne (min: ${minCtaChars}, max: ${maxCtaChars})\n`;
                 fp += `    Mots: ${avgCtaWords} en moyenne\n`;
                 if (hasCtaLineBreaks) {
-                    fp += `    Sauts de ligne: OUI (${avgCtaLineBreaks.toFixed(1)} en moyenne) — le CTA utilise des paragraphes\n`;
+                    fp += `    Sauts de ligne: OUI (${avgCtaLineBreaks.toFixed(1)} en moyenne)  - le CTA utilise des paragraphes\n`;
                 } else {
-                    fp += `    Sauts de ligne: NON — le CTA est en bloc continu\n`;
+                    fp += `    Sauts de ligne: NON  - le CTA est en bloc continu\n`;
                 }
                 if (ctaEmojiRatio > 0.5) {
-                    fp += `    Émojis dans CTA: OUI (${Math.round(ctaEmojiRatio * 100)}% des CTA) — les émojis font partie de ton style CTA\n`;
+                    fp += `    Émojis dans CTA: OUI (${Math.round(ctaEmojiRatio * 100)}% des CTA)  - les émojis font partie de ton style CTA\n`;
                 } else if (ctaEmojiRatio > 0) {
                     fp += `    Émojis dans CTA: PARFOIS (${Math.round(ctaEmojiRatio * 100)}%)\n`;
                 } else {
@@ -1132,11 +1132,11 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
 
                 fp += `    → CRITIQUE: Ton CTA fait ~${avgCtaChars} caractères. RESPECTE cette longueur. `;
                 if (avgCtaChars > 150) {
-                    fp += `Tu écris des CTA LONGS et détaillés — c'est ta force, ne raccourcis PAS.\n`;
+                    fp += `Tu écris des CTA LONGS et détaillés  - c'est ta force, ne raccourcis PAS.\n`;
                 } else if (avgCtaChars > 80) {
-                    fp += `Tu écris des CTA de longueur moyenne — ni trop courts ni trop longs.\n`;
+                    fp += `Tu écris des CTA de longueur moyenne  - ni trop courts ni trop longs.\n`;
                 } else {
-                    fp += `Tu écris des CTA COURTS et directs — ne surcharge PAS.\n`;
+                    fp += `Tu écris des CTA COURTS et directs  - ne surcharge PAS.\n`;
                 }
             }
 
@@ -1196,10 +1196,10 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
     })();
 
     try {
-        const carouselSystemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle — tu ES cette personne. Chaque mot que tu écris doit sonner exactement comme ${authority} parlerait à son audience en DM. Tu es un expert de la niche "${(profile as any)?.niche || 'General'}" et tu crées du contenu carrousel qui génère des milliers de vues.
+        const carouselSystemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle  - tu ES cette personne. Chaque mot que tu écris doit sonner exactement comme ${authority} parlerait à son audience en DM. Tu es un expert de la niche "${(profile as any)?.niche || 'General'}" et tu crées du contenu carrousel qui génère des milliers de vues.
 
 LANGUE: FRANCAIS natif uniquement. Tu tutoies. Tu parles comme un vrai createur francais, naturel, direct, avec du rythme. JAMAIS de ton robotique ou corporate.
-PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points. Les tirets longs font "GPT/IA" et cassent l'authenticite.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs ( -) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points. Les tirets longs font "GPT/IA" et cassent l'authenticite.
 
 TON AUDIENCE: ${targetAudience}
 Tu sais exactement ce qui les empêche de dormir, ce qu'ils désirent, et quels mots les font s'arrêter de scroller. Chaque slide doit leur parler DIRECTEMENT, comme si tu leur envoyais un message personnel.
@@ -1209,16 +1209,16 @@ ${deepViralAnalysis}
 ${performanceIntelligence}
 ${linguisticFingerprint}
 
-OBJECTIF: Comprendre POURQUOI tes posts ont performé, t'en INSPIRER, puis INNOVER. Tu ne copies JAMAIS un post existant — tu comprends les mécanismes qui ont fonctionné (structure, rythme, ton, techniques de suspense) et tu les appliques à un NOUVEAU sujet avec une approche FRAÎCHE.
+OBJECTIF: Comprendre POURQUOI tes posts ont performé, t'en INSPIRER, puis INNOVER. Tu ne copies JAMAIS un post existant  - tu comprends les mécanismes qui ont fonctionné (structure, rythme, ton, techniques de suspense) et tu les appliques à un NOUVEAU sujet avec une approche FRAÎCHE.
 
 EMPREINTE STYLISTIQUE À RESPECTER (c'est ce qui te rend reconnaissable):
-1. La LONGUEUR MOYENNE de tes slides — reste dans la même fourchette
-2. Le PROFIL DE PONCTUATION "..." vs "." vs "?" vs "!" — c'est ta signature, garde-la
+1. La LONGUEUR MOYENNE de tes slides  - reste dans la même fourchette
+2. Le PROFIL DE PONCTUATION "..." vs "." vs "?" vs "!"  - c'est ta signature, garde-la
 3. Les ÉMOJIS: si tu en utilises, utilise le même type. Si tu n'en utilises PAS, n'en ajoute PAS
 4. Les TICS DE LANGAGE: intègre naturellement les expressions que tu utilises régulièrement
 5. Les MAJUSCULES: reproduis ton usage (ou non-usage) de mots en CAPS
-6. Le RYTHME: phrases courtes/longues/mélangées — c'est ton empreinte sonore
-7. Le VOCABULAIRE naturel — les mots qui sonnent comme TOI, pas comme une IA
+6. Le RYTHME: phrases courtes/longues/mélangées  - c'est ton empreinte sonore
+7. Le VOCABULAIRE naturel  - les mots qui sonnent comme TOI, pas comme une IA
 
 CE QUI DOIT ÊTRE NOUVEAU À CHAQUE POST:
 - L'ANGLE: un regard différent, une idée qu'on n'a pas encore vue
@@ -1239,17 +1239,17 @@ STRUCTURE:
 - ADAPTE-TOI au hook fourni. Si le hook est de type "Les X signes/erreurs/raisons que...", utilise un format LISTE NUMÉROTÉE (1. ..., 2. ..., etc.), chaque numéro AU DÉBUT de sa propre slide.
 - Si le hook est de type narratif/story, utilise un arc narratif avec tension et révélation.
 - ANALYSE tes posts performants pour identifier TA structure préférée et reproduis-la.
-- Slide 1 = HOOK (texte exact fourni — NE PAS le modifier). Dernière slide = CTA.
+- Slide 1 = HOOK (texte exact fourni  - NE PAS le modifier). Dernière slide = CTA.
 
 NOMBRE DE SLIDES: ${formattingStats.hasData ? `${formattingStats.avgSlideCount} slides (basé sur tes posts: fourchette ${formattingStats.minSlideCount}-${formattingStats.maxSlideCount}).` : '7-8.'}
 
-TEXTE PAR SLIDE (slides 2 à avant-dernière): ${formattingStats.hasData ? `Vise ~${formattingStats.avgBodyChars} caractères par slide (max ~${formattingStats.maxBodyChars + 20} chars). C'est TON rythme.` : 'Adapte la longueur du texte au contenu — chaque slide doit être lisible sur une image TikTok.'}
+TEXTE PAR SLIDE (slides 2 à avant-dernière): ${formattingStats.hasData ? `Vise ~${formattingStats.avgBodyChars} caractères par slide (max ~${formattingStats.maxBodyChars + 20} chars). C'est TON rythme.` : 'Adapte la longueur du texte au contenu  - chaque slide doit être lisible sur une image TikTok.'}
 - Répartis le contenu uniformément. Aucune slide ne doit avoir 3x plus de texte qu'une autre.
 
 CTA (DERNIÈRE SLIDE):
 Call To Action lié à: "${leadMagnet}"
-${formattingStats.hasData ? `- LONGUEUR CTA: Tes CTA font en moyenne ~${formattingStats.avgCtaChars} caractères (max observé: ${formattingStats.maxCtaChars}). RESPECTE cette longueur — c'est ton style. ${formattingStats.avgCtaChars > 150 ? "Tu écris des CTA LONGS et détaillés — reproduis exactement cette richesse." : formattingStats.avgCtaChars > 80 ? "Tu écris des CTA de taille moyenne — ni trop courts ni trop longs." : "Tu écris des CTA COURTS et percutants — ne surcharge pas."}` : '- Le CTA est CRUCIAL pour la conversion. Il peut être aussi long que nécessaire.'}
-- INSPIRE-TOI FORTEMENT de tes CTA qui ont fonctionné — tu peux reprendre presque la même structure et les mêmes formulations en adaptant au sujet du carrousel.
+${formattingStats.hasData ? `- LONGUEUR CTA: Tes CTA font en moyenne ~${formattingStats.avgCtaChars} caractères (max observé: ${formattingStats.maxCtaChars}). RESPECTE cette longueur  - c'est ton style. ${formattingStats.avgCtaChars > 150 ? "Tu écris des CTA LONGS et détaillés  - reproduis exactement cette richesse." : formattingStats.avgCtaChars > 80 ? "Tu écris des CTA de taille moyenne  - ni trop courts ni trop longs." : "Tu écris des CTA COURTS et percutants  - ne surcharge pas."}` : '- Le CTA est CRUCIAL pour la conversion. Il peut être aussi long que nécessaire.'}
+- INSPIRE-TOI FORTEMENT de tes CTA qui ont fonctionné  - tu peux reprendre presque la même structure et les mêmes formulations en adaptant au sujet du carrousel.
 ${(() => {
     // Extract CTA patterns from viral posts
     const ctaExamples: string[] = [];
@@ -1273,7 +1273,7 @@ Génère aussi une description TikTok/Instagram pour le post.
 - La description COMPLÈTE le carrousel, ne le répète pas. Crée de l'urgence ou de la curiosité.
 ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien fonctionné pour te donner le ton général:\n${descriptionStyleContext}\n- Tu peux t'en inspirer LIBREMENT: garde le même ton et la même personnalité, mais tu as carte blanche sur la STRUCTURE, la LONGUEUR, et l'APPROCHE. Chaque description doit être UNIQUE et adaptée au contenu du carrousel.` : '- Écris une description naturelle qui ressemble à ce que tu posterais vraiment.'}
 - La description doit rester COHÉRENTE avec le personnage de ${authority} (même registre de langue, même énergie globale).
-- OBLIGATOIRE: Les TICS DE LANGAGE du créateur s'appliquent AUSSI à la description. Ce sont ses mots signature — ils doivent apparaître naturellement dans la description comme dans les slides.
+- OBLIGATOIRE: Les TICS DE LANGAGE du créateur s'appliquent AUSSI à la description. Ce sont ses mots signature  - ils doivent apparaître naturellement dans la description comme dans les slides.
 - Tu es LIBRE de varier:
   * La longueur (courte et percutante OU plus développée)
   * La structure (question, affirmation, storytelling, interpellation directe, etc.)
@@ -1293,10 +1293,10 @@ Tu DOIS intégrer 2 références au produit dans le carrousel. Ces 2 référence
 
 ═══ RÉFÉRENCE 1 : INTÉGRÉE DANS LE CONTENU (slide 2-5) ═══
 Le produit apparaît comme une SOLUTION NATURELLE au problème/émotion soulevé par le post.
-Il est TISSÉ dans l'argumentaire — le lecteur ne doit PAS percevoir de rupture.
+Il est TISSÉ dans l'argumentaire  - le lecteur ne doit PAS percevoir de rupture.
 
 ✅ BON (intégré naturellement dans le propos) :
-- "Et c'est exactement pour ça que [concept du produit] change tout — parce que ça te force à comprendre [bénéfice] au lieu de rester dans le flou"
+- "Et c'est exactement pour ça que [concept du produit] change tout  - parce que ça te force à comprendre [bénéfice] au lieu de rester dans le flou"
 - "Perso ce qui m'a aidée à débloquer ça c'est quand j'ai compris [insight lié au produit]... et tout a changé"
 - "La vraie question c'est pas 'est-ce qu'il t'aime' mais 'est-ce que tu te connais assez pour le voir'... [transition naturelle vers le concept du produit]"
 
@@ -1363,7 +1363,7 @@ Retourne UNIQUEMENT un objet JSON:
             slides = slides.slice(0, 9);
         }
 
-        // 3. Fix orphaned numbers — if a slide ends with a lonely number like "2." or "😊 3.",
+        // 3. Fix orphaned numbers  - if a slide ends with a lonely number like "2." or "😊 3.",
         // move it to the beginning of the next slide
         for (let i = 0; i < slides.length - 1; i++) {
             const text = slides[i].text;
@@ -1382,7 +1382,7 @@ Retourne UNIQUEMENT un objet JSON:
         }
 
         // Narrative consistency is enforced via the system prompt (narrativeFacts + NEVER CONTRADICT)
-        // No separate validation call needed — saves ~500 tokens per carousel
+        // No separate validation call needed  - saves ~500 tokens per carousel
 
         // 4. Append hashtags (no debug message in production)
         let aiDescription = stripEmDashes(result.description || "");
@@ -1421,7 +1421,7 @@ Retourne UNIQUEMENT un objet JSON:
 
     // Build image usage frequency map across ALL fetched posts
     const imageUsageCount = new Map<string, number>();
-    const recentUsedImageIds = new Set<string>(); // Last 20 posts — soft exclusion
+    const recentUsedImageIds = new Set<string>(); // Last 20 posts  - soft exclusion
     lastPosts.forEach((p, idx) => {
         try {
             const s = JSON.parse(p.slides || '[]') as Slide[];
@@ -1566,10 +1566,10 @@ Retourne UNIQUEMENT un objet JSON:
 
 EMOTIONAL ARC:
 This carousel follows an emotional journey. Each slide has a specific role in the arc:
-- OPENING (Hook): SHOCK and GRAB attention — needs bold, provocative, high-impact visuals that stop the scroll
-- MIDDLE (Tension): BUILD curiosity, create STAKES — needs mysterious, intriguing, tension-building visuals
-- MIDDLE (Value): DELIVER insight, build TRUST — needs clean, credible, authoritative visuals
-- CLOSING (CTA): DRIVE action, leave a LASTING impression — needs warm, personal, empowering visuals
+- OPENING (Hook): SHOCK and GRAB attention  - needs bold, provocative, high-impact visuals that stop the scroll
+- MIDDLE (Tension): BUILD curiosity, create STAKES  - needs mysterious, intriguing, tension-building visuals
+- MIDDLE (Value): DELIVER insight, build TRUST  - needs clean, credible, authoritative visuals
+- CLOSING (CTA): DRIVE action, leave a LASTING impression  - needs warm, personal, empowering visuals
 
 The viewer must FEEL the emotional progression through the images alone.
 
@@ -1583,7 +1583,7 @@ MATCHING CRITERIA (in order of priority):
 CONSTRAINTS:
 - Each slide MUST have a UNIQUE image ID. NO duplicates.
 - **FRESHNESS PRIORITY**: Each image has a "Used: Nx" count. STRONGLY prefer images with Used: 0x (never used) over those already used multiple times. Only pick a frequently-used image if it's a MUCH better emotional/content match.
-- If no image fits well, pick the least-bad option — NEVER leave a slide without an image.
+- If no image fits well, pick the least-bad option  - NEVER leave a slide without an image.
 
 Return ONLY a JSON object: { "1": "image-id", "2": "image-id", ... }
 
@@ -1608,7 +1608,7 @@ ${imagesText}`;
         slides = slides.map(s => {
             let imgId = mapping[s.slide_number.toString()] || mapping[s.slide_number];
 
-            // Enforce uniqueness — if duplicate, find next best unused image
+            // Enforce uniqueness  - if duplicate, find next best unused image
             if (!imgId || usedInThisCarousel.has(imgId) || !imageMap.has(imgId)) {
                 // Fallback: pick first unused candidate image
                 const fallback = candidateImages.find(i => !usedInThisCarousel.has(i.id));
@@ -1655,7 +1655,7 @@ export async function saveCarousel(hook: string, slides: Slide[], description: s
         if (!activeProfileId) return { error: 'No active profile found. Please select a profile first.' };
 
         // [NEW] 1. Check for Duplicate Hook (within same profile)
-        // Exclude 'idea' status — ideas are just saved hooks without content,
+        // Exclude 'idea' status  - ideas are just saved hooks without content,
         // and should be upgradeable to drafts/posts with the same hookText.
         const existingPost = await prisma.post.findFirst({
             where: {
@@ -1830,7 +1830,7 @@ export async function remixCompetitorPost(competitorPostText: string, competitor
 
         const remixSystemPrompt = `Tu es un stratège de contenu pour "${authority}" dans la niche "${niche}", ciblant ${targetAudience}.
 LANGUE: FRANÇAIS uniquement. Sonne HUMAIN, pas IA. Écris comme un vrai créateur français.
-INTERDIT: Ne copie aucune phrase de l'original. N'utilise JAMAIS le caractère '→' ni les tirets longs (—/–).
+INTERDIT: Ne copie aucune phrase de l'original. N'utilise JAMAIS le caractère '→' ni les tirets longs ( -/–).
 ${narrativeFacts}
 ${hookFingerprint}
 ${hookFingerprint ? `RÈGLE CRITIQUE: Les hooks remixés DOIVENT respecter l'empreinte linguistique ci-dessus. Même ponctuation, mêmes émojis (ou absence), mêmes tics de langage, même registre. Les hooks doivent sonner comme le CRÉATEUR, pas comme le concurrent.` : ''}
@@ -1900,7 +1900,7 @@ export async function scoreCarouselBeforePublish(hookText: string, slides: Slide
             : '';
 
         const scoreSystemPrompt = `Tu es un analyste de performance TikTok. Évalue les carrousels AVANT publication.
-IMPORTANT: Dans TOUS les textes (improvements, strengths, formattingIssues), n'utilise JAMAIS de tirets longs (—) ou moyens (–). Utilise uniquement des tirets courts (-), des virgules ou des points.
+IMPORTANT: Dans TOUS les textes (improvements, strengths, formattingIssues), n'utilise JAMAIS de tirets longs ( -) ou moyens (–). Utilise uniquement des tirets courts (-), des virgules ou des points.
 LANGUE: Réponds UNIQUEMENT en FRANÇAIS.
 
 Évalue sur 6 critères (chaque /20, total /120 puis normalisé à /100):
@@ -1909,7 +1909,7 @@ LANGUE: Réponds UNIQUEMENT en FRANÇAIS.
 3. textQuality (/20): Humain, authentique, pas IA ? Équilibré entre slides ?
 4. valueDensity (/20): Contenu actionnable ?
 5. ctaStrength (/20): Convertit en followers/engagement ?
-6. slideFormatting (/20): Lisibilité TikTok — texte trop long (30+ mots), slides vides (<3 mots), phrases coupées, numérotation orpheline (numéro seul en fin de slide, pas les listes "1. ...").
+6. slideFormatting (/20): Lisibilité TikTok  - texte trop long (30+ mots), slides vides (<3 mots), phrases coupées, numérotation orpheline (numéro seul en fin de slide, pas les listes "1. ...").
 
 JSON UNIQUEMENT:
 {"scores":{"hookPower":16,"retentionFlow":14,"textQuality":17,"valueDensity":15,"ctaStrength":12,"slideFormatting":18},"total":74,"prediction":"above_average|average|below_average","estimatedViews":"8000-12000","improvements":["suggestion 1"],"formattingIssues":["Slide 3: issue"],"strengths":["point fort 1"]}`;
@@ -2024,7 +2024,7 @@ export async function improveCarouselFromScore(
 
         const improveSystemPrompt = `Tu es un optimiseur de contenu viral pour "${authority}", ciblant ${targetAudience}.
 LANGUE: FRANÇAIS uniquement. Tu tutoies. Tu parles comme un vrai créateur français, naturel, direct.
-PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs ( -) ni de tirets moyens (–). Utilise uniquement des tirets courts (-), des virgules, ou des points.
 ${linguisticFingerprint ? `
 ${linguisticFingerprint}
 RÈGLE CRITIQUE: Les améliorations DOIVENT respecter l'empreinte linguistique ci-dessus. Garde les mêmes tics de langage, la même ponctuation, le même registre, la même énergie. Le texte amélioré doit sonner EXACTEMENT comme le créateur, pas comme une IA.` : ''}
@@ -2219,7 +2219,7 @@ export async function generateVariations(seedHook: HookProposal) {
 
     const systemPrompt = `Tu es ${authority}. Tu crées du contenu dans la niche "${niche}" pour ${targetAudience}.
 LANGUE: FRANÇAIS natif uniquement. Tu tutoies. Direct, naturel, avec du punch.
-PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs (—/–). Tirets courts (-) uniquement.
+PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs ( -/–). Tirets courts (-) uniquement.
 INTERDIT: le caractère '→'.
 ${narrativeFacts}
 
