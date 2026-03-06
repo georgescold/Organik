@@ -264,7 +264,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                     textAlign: 'center' as const,
                     color: '#ffffff',
                     outlineColor: '#000000',
-                    outlineWidth: 1.5,
+                    outlineWidth: 1.25,
                     lineHeight: 1.5,
                     maxWidth: 330, // matches preview's px-3 padding (~360 - 30)
                     textMode: 'outline' as const,
@@ -543,7 +543,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                         }
 
                         const textMode = tl.textMode || 'outline';
-                        const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
+                        const outlineW = Math.round((tl.outlineWidth || 1.25) * scaleX);
                         const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
                         const totalH = lines.length * lineH + (lines.length > 1 ? (lines.length - 1) * captionGap : 0);
                         const startY = -totalH / 2;
@@ -1138,7 +1138,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
                             }
 
                             const textMode = tl.textMode || 'outline';
-                            const outlineW = Math.round((tl.outlineWidth || 1.5) * scaleX);
+                            const outlineW = Math.round((tl.outlineWidth || 1.25) * scaleX);
                             const captionGap = textMode === 'caption' ? Math.round(4 * scaleX) : 0;
                             const totalH = lines.length * lineH + (lines.length > 1 ? (lines.length - 1) * captionGap : 0);
                             const startY = -totalH / 2;

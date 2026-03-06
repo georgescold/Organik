@@ -41,6 +41,8 @@ export function DashboardTabs({
     const [animatingTab, setAnimatingTab] = useState<TabId | null>(null);
     // Track which tabs have been visited (lazy mount: only render once visited)
     const visitedTabs = useRef(new Set<TabId>([getInitialTab()]));
+    // Force re-render counter when profile changes
+    const [profileRefreshKey, setProfileRefreshKey] = useState(0);
     // Scroll indicator
     const tabsScrollRef = useRef<HTMLDivElement>(null);
     const [canScrollRight, setCanScrollRight] = useState(false);
@@ -65,6 +67,18 @@ export function DashboardTabs({
             observer.disconnect();
         };
     }, [checkScroll]);
+
+    // Reset visited tabs cache when profile changes to force fresh remount
+    const profileId = activeProfile?.id;
+    const prevProfileRef = useRef(profileId);
+    useEffect(() => {
+        if (prevProfileRef.current && prevProfileRef.current !== profileId) {
+            // Profile changed — reset lazy-mount cache to force fresh renders
+            visitedTabs.current = new Set<TabId>([activeTab]);
+            setProfileRefreshKey(k => k + 1);
+        }
+        prevProfileRef.current = profileId;
+    }, [profileId, activeTab]);
 
     const handleTabChange = (tab: TabId) => {
         if (tab === activeTab) return;
@@ -144,6 +158,7 @@ export function DashboardTabs({
         if (!visitedTabs.current.has(id)) return null;
         return (
             <div
+                key={`${id}-${profileRefreshKey}`}
                 style={{ display: activeTab === id ? 'block' : 'none' }}
                 className={animatingTab === id ? 'tab-content-enter' : ''}
             >
