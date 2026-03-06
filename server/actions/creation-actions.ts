@@ -13,9 +13,15 @@ const MODEL = 'claude-sonnet-4-6';
 const HAIKU_MODEL = 'claude-haiku-4-5-20251001';
 const VIRAL_THRESHOLD = 10000; // Posts with 10k+ views are considered truly viral
 
-// Strip em-dashes from all AI-generated text (GPT-style long dashes)
+// Strip ALL long dash variants from AI-generated text (GPT-style)
 function stripEmDashes(text: string): string {
-    return text.replace(/\u2014/g, '-').replace(/\u2013/g, '-');
+    return text
+        .replace(/[\u2014\u2015\u2E3A\u2E3B\uFE58]/g, '-')  // em-dash, horizontal bar, two/three-em dash, small em dash
+        .replace(/[\u2013\uFE32\uFE63]/g, '-')                // en-dash, presentation forms
+        .replace(/\u2192/g, '')                                 // → arrow (also GPT-ish)
+        .replace(/\s*-{2,}\s*/g, ' - ')                         // collapse multiple dashes "---" into single
+        .replace(/\s+-\s*$/gm, '')                              // remove trailing " -" at end of lines
+        ;
 }
 
 // Robust JSON extraction - handles cases where the AI returns text around the JSON

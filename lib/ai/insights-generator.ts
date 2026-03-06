@@ -3,6 +3,14 @@
 import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 
+// Strip GPT-style long dashes from all text
+function deepStripEmDashes(obj: any): any {
+    if (typeof obj === 'string') return obj.replace(/[\u2014\u2015\u2E3A\u2E3B\uFE58\u2013\uFE32\uFE63]/g, '-').replace(/\u2192/g, '').replace(/\s*-{2,}\s*/g, ' - ');
+    if (Array.isArray(obj)) return obj.map(deepStripEmDashes);
+    if (obj && typeof obj === 'object') { const r: any = {}; for (const [k, v] of Object.entries(obj)) r[k] = deepStripEmDashes(v); return r; }
+    return obj;
+}
+
 // TypeScript interface for insights structure
 export interface ProfileInsightsData {
     bestHookPatterns: {
@@ -156,7 +164,8 @@ IMPORTANT:
 
         const text = (message.content[0] as any).text;
         const cleanJson = text.replace(/```json\n?|\n?```/g, '').trim();
-        const insights: Partial<ProfileInsightsData> = JSON.parse(cleanJson);
+        const insightsRaw: Partial<ProfileInsightsData> = JSON.parse(cleanJson);
+        const insights = deepStripEmDashes(insightsRaw) as Partial<ProfileInsightsData>;
 
         // 6. Add metadata
         const fullInsights: ProfileInsightsData = {

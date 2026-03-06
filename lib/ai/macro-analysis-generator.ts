@@ -3,6 +3,28 @@
 import { prisma } from '@/lib/prisma';
 import Anthropic from '@anthropic-ai/sdk';
 
+// Strip all long dash variants from AI text (GPT-style em-dashes)
+function stripEmDashes(text: string): string {
+    return text
+        .replace(/[\u2014\u2015\u2E3A\u2E3B\uFE58]/g, '-')
+        .replace(/[\u2013\uFE32\uFE63]/g, '-')
+        .replace(/\u2192/g, '')
+        .replace(/\s*-{2,}\s*/g, ' - ')
+        .replace(/\s+-\s*$/gm, '');
+}
+
+// Recursively strip em-dashes from all string values in an object
+function deepStripEmDashes(obj: any): any {
+    if (typeof obj === 'string') return stripEmDashes(obj);
+    if (Array.isArray(obj)) return obj.map(deepStripEmDashes);
+    if (obj && typeof obj === 'object') {
+        const result: any = {};
+        for (const [k, v] of Object.entries(obj)) result[k] = deepStripEmDashes(v);
+        return result;
+    }
+    return obj;
+}
+
 // ============= TYPES =============
 
 export interface MacroAnalysisData {
@@ -326,7 +348,10 @@ POUR LES suggestedAngles (3-5 par profil) :
             }
         }
 
-        // 8. Add metadata
+        // 8. Strip GPT-style em-dashes from all text in the analysis
+        analysis = deepStripEmDashes(analysis);
+
+        // 9. Add metadata
         const fullAnalysis: MacroAnalysisData = {
             ...analysis as MacroAnalysisData,
             metadata: {
@@ -336,7 +361,7 @@ POUR LES suggestedAngles (3-5 par profil) :
             }
         };
 
-        // 9. Cache in database
+        // 10. Cache in database
         await prisma.panelMacroAnalysis.upsert({
             where: { adminPanelId: panelId },
             create: {
