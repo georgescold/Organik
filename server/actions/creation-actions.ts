@@ -1268,16 +1268,16 @@ ${descriptionStyleContext ? `- Voici des exemples de descriptions qui ont bien f
 - INTERDIT: le caractère flèche '→'
 ${narrativeContext}
 ${uniquenessContext}
-${productBible ? `\n--- PRODUCT BIBLE (PLACEMENT SUBTIL) ---
-Tu as accès à la base de connaissances complète du produit "${productName || 'le produit'}". Ton objectif est d'intégrer des RÉFÉRENCES SUBTILES et NATURELLES à ce produit dans le carrousel UNIQUEMENT quand c'est pertinent par rapport au sujet du post.
+${productBible ? `\n--- PRODUCT BIBLE (PLACEMENT OBLIGATOIRE) ---
+Tu as accès à la base de connaissances complète du produit "${productName || 'le produit'}". Tu DOIS intégrer des références subtiles à ce produit dans CHAQUE carrousel généré.
 
 RÈGLES DE PLACEMENT OBLIGATOIRES:
-1. SUBTILITÉ ABSOLUE: Le post doit rester un contenu de VALEUR avant tout. La mention produit doit sembler être un exemple naturel, une anecdote, une référence organique — JAMAIS une publicité.
-2. PERTINENCE: Ne mentionne le produit QUE si le sujet du carrousel permet une connexion naturelle. Si le hook parle d'un sujet sans rapport → ne force AUCUNE mention.
-3. DOSAGE: Maximum 1-2 slides peuvent contenir une référence produit (sur 7-8 slides). Les slides restantes doivent être du pur contenu de valeur.
-4. INTÉGRATION: La mention doit s'intégrer dans le flow du texte comme un EXEMPLE concret, une RECOMMANDATION naturelle, ou une ILLUSTRATION du propos. Jamais en rupture de ton.
+1. MINIMUM 2 RÉFÉRENCES OBLIGATOIRES: Tu DOIS placer AU MOINS 2 références subtiles au produit dans le carrousel. Ce n'est PAS optionnel — chaque post DOIT contenir exactement 2 mentions produit minimum.
+2. ESPACEMENT OBLIGATOIRE: Les 2 références doivent être ESPACÉES dans le carrousel. Elles ne doivent JAMAIS être sur la même slide ni sur 2 slides consécutives. Idéalement : 1 référence entre les slides 2-4 et 1 référence entre les slides 5-7 (ou dernière slide/CTA).
+3. SUBTILITÉ ABSOLUE: Le post reste un contenu de VALEUR avant tout. Chaque mention produit doit sembler être un exemple naturel, une anecdote, une recommandation organique — JAMAIS une publicité. Le lecteur ne doit PAS sentir qu'on lui vend quelque chose.
+4. INTÉGRATION: Chaque mention doit s'intégrer dans le flow du texte comme un EXEMPLE concret, une RECOMMANDATION naturelle, ou une ILLUSTRATION du propos. Jamais en rupture de ton.
 5. VOCABULAIRE: Utilise le vocabulaire et les termes spécifiques du produit décrits dans le bible ci-dessous pour que les mentions sonnent authentiques.
-6. CTA: Si le produit est mentionné, le CTA de la dernière slide PEUT inclure une référence plus directe (mais toujours dans le style du créateur).
+6. CTA: La 2ème référence PEUT être dans la dernière slide/CTA avec une mention légèrement plus directe (lien bio, recommandation, etc.) mais toujours dans le style du créateur.
 
 PRODUCT BIBLE:
 ${productBible}
