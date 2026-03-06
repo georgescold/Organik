@@ -173,7 +173,7 @@ export async function getUserImages(collectionId?: string, page: number = 1, lim
     try {
         const whereClause = collectionId
             ? { collections: { some: { id: collectionId } } }
-            : {}; // Shared Collection: Fetch all images regardless of user if no collection specified
+            : { userId: session.user.id }; // Show only the user's own images when no collection filter
 
         const [imagesRaw, total] = await Promise.all([
             prisma.image.findMany({

@@ -84,9 +84,10 @@ interface CreationViewProps {
         editorData?: string | null; // JSON string (EditorSlide[] with canvas dims)
         status: string;
     };
+    activeProfileId?: string | null;
 }
 
-export function CreationView({ initialPost }: CreationViewProps) {
+export function CreationView({ initialPost, activeProfileId }: CreationViewProps) {
     const [step, setStep] = useState<'hooks' | 'preview'>('hooks');
     const [hooks, setHooks] = useState<HookProposal[]>([]);
     const [selectedHook, setSelectedHook] = useState<HookProposal | null>(null);
@@ -125,7 +126,7 @@ export function CreationView({ initialPost }: CreationViewProps) {
 
     // ─── Session persistence: auto-save state to sessionStorage on change ───
     // Prevents data loss on page refresh during creation flow
-    const SESSION_KEY = 'creation-session-state';
+    const SESSION_KEY = activeProfileId ? `creation-session-${activeProfileId}` : 'creation-session-state';
     const isRestoringRef = useRef(false);
 
     // Restore session state on mount (only if no initialPost — that takes priority)

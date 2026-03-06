@@ -92,7 +92,7 @@ export default async function DashboardPage(props: PageProps) {
                 competitorsContent={<CompetitorAnalysisDashboard userId={user.id} key={`comp-${activeProfileId}`} />}
                 comparisonContent={<GlobalComparisonDashboard userId={user.id} key={`cmp-${activeProfileId}`} />}
                 collectionsContent={<CollectionsView collectionId={searchParams.collection as string} key={`col-${activeProfileId}`} />}
-                creationContent={<CreationView key={`crea-${activeProfileId}`} />}
+                creationContent={<CreationView key={`crea-${activeProfileId}`} activeProfileId={activeProfileId} />}
                 apiKeyContent={<UnifiedApiSettings />}
                 userNav={UserNav}
                 activeProfile={activeProfile}
