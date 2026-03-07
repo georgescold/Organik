@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useState, useTransition } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Trash2, Loader2, AlertCircle, CheckCircle2, X, FolderPlus, MinusCircle, Image as ImageIcon } from 'lucide-react';
+import { Trash2, Loader2, AlertCircle, CheckCircle2, X, FolderPlus, MinusCircle, Image as ImageIcon, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { deleteImage, deleteImages } from '@/server/actions/image-actions';
 import { removeImageFromCollection, removeImagesFromCollection } from '@/server/actions/collection-actions';
@@ -164,6 +164,17 @@ export function ImageGrid({ images, collectionId }: { images: ClientImage[], col
                         >
                             <FolderPlus className="w-4 h-4 mr-2" />
                             Ajouter ({selectedIds.size})
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            disabled={selectedIds.size === 0}
+                            onClick={() => {
+                                const ids = Array.from(selectedIds).join(',');
+                                window.open(`/api/backup/collections?ids=${ids}`, '_blank');
+                            }}
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Télécharger ({selectedIds.size})
                         </Button>
                         <Button
                             variant="destructive"

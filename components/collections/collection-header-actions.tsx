@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Download, PlusCircle } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { AddExistingImagesDialog } from "./add-existing-images-dialog";
 
@@ -13,6 +12,10 @@ interface CollectionHeaderActionsProps {
 
 export function CollectionHeaderActions({ collectionId, currentImageIds }: CollectionHeaderActionsProps) {
     const [openAdd, setOpenAdd] = useState(false);
+
+    const downloadUrl = collectionId
+        ? `/api/backup/collections?collectionId=${collectionId}`
+        : '/api/backup/collections';
 
     return (
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -31,11 +34,13 @@ export function CollectionHeaderActions({ collectionId, currentImageIds }: Colle
                 </>
             )}
 
-            <Button variant="outline" asChild className="flex-1 sm:flex-none h-10 text-sm touch-manipulation">
-                <Link href="/api/backup/collections" target="_blank">
-                    <Download className="mr-1.5 h-4 w-4" />
-                    Tout télécharger
-                </Link>
+            <Button
+                variant="outline"
+                className="flex-1 sm:flex-none h-10 text-sm touch-manipulation"
+                onClick={() => window.open(downloadUrl, '_blank')}
+            >
+                <Download className="mr-1.5 h-4 w-4" />
+                Tout télécharger
             </Button>
         </div>
     );
