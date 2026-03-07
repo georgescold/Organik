@@ -43,7 +43,7 @@ export function AddExistingImagesDialog({ open, onOpenChange, collectionId, curr
                 setImages(cacheRef.current);
             } else {
                 setLoading(true);
-                getUserImages().then(res => {
+                getUserImages(undefined, 1, 0).then(res => {
                     if (res.success) {
                         const imgs = res.images || [];
                         setImages(imgs);

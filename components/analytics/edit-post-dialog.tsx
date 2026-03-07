@@ -102,7 +102,7 @@ export function EditPostDialog({ open, onOpenChange, post }: EditPostDialogProps
         setIsImagePickerOpen(true);
         if (userImages.length === 0) {
             setIsLoadingImages(true);
-            const res = await getUserImages();
+            const res = await getUserImages(undefined, 1, 0);
             if (res.success && res.images) {
                 setUserImages(res.images);
             } else {

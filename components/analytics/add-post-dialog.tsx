@@ -39,7 +39,7 @@ export function AddPostDialog() {
     useEffect(() => {
         if (open) {
             startTransition(async () => {
-                const result = await getUserImages();
+                const result = await getUserImages(undefined, 1, 0);
                 if (result.success && result.images) {
                     setImages(result.images);
                 } else {

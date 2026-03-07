@@ -15,7 +15,7 @@ interface CollectionsViewProps {
 export async function CollectionsView({ collectionId }: CollectionsViewProps) {
     // Parallel fetching
     const [imagesResult, collectionsResult] = await Promise.all([
-        getUserImages(collectionId),
+        getUserImages(collectionId, 1, 0),
         getUserCollections()
     ]);
 
