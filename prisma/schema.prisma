@@ -413,8 +413,8 @@ model Image {
   collections     Collection[]
   createdAt       DateTime     @default(now())
 
+  @@unique([userId, hash])      // Prevent duplicate images per user (enforced on upload)
   @@index([userId])             // Fast image listing per user
-  @@index([userId, hash])       // Fast duplicate detection on upload
   @@index([userId, filename])   // Fast filename lookup on upload
   @@index([qualityScore])       // Fast quality-based sorting
   @@index([createdAt])          // Fast chronological listing

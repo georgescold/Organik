@@ -45,6 +45,22 @@ export async function uploadImage(formData: FormData) {
             // Calculate hash for dedup
             const hash = createHash('sha256').update(buffer).digest('hex');
 
+            // 0. Check for duplicate BEFORE uploading to Supabase (saves storage + API cost)
+            const existingImage = await prisma.image.findFirst({
+                where: { userId, hash },
+                select: { id: true }
+            });
+            if (existingImage) {
+                // Link to collection if needed, then skip
+                if (collectionId) {
+                    await prisma.collection.update({
+                        where: { id: collectionId },
+                        data: { images: { connect: { id: existingImage.id } } }
+                    }).catch(() => {});
+                }
+                return { success: true, file: file.name, duplicate: true };
+            }
+
             // 1. Save to Supabase Storage (before DB — idempotent with uuidv4 path)
             const ext = file.name.split('.').pop();
             const uuid = uuidv4();
@@ -154,6 +170,8 @@ export async function uploadImage(formData: FormData) {
     // Process all files in parallel
     const results = await Promise.all(files.map(processFile));
     const successCount = results.filter(r => r.success).length;
+    const duplicateCount = results.filter(r => (r as any).duplicate).length;
+    const newCount = successCount - duplicateCount;
 
     revalidatePath('/dashboard', 'page');
 
@@ -163,7 +181,7 @@ export async function uploadImage(formData: FormData) {
         return { error: firstError || 'Failed to upload images' };
     }
 
-    return { success: true, count: successCount, total: files.length, results };
+    return { success: true, count: successCount, total: files.length, newCount, duplicateCount, results };
 }
 
 export async function getUserImages(collectionId?: string, page: number = 1, limit: number = 100) {

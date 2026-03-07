@@ -59,6 +59,7 @@ export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderPr
         setUploadedCountState(0);
 
         let uploadedCount = 0;
+        let duplicates = 0;
         let errors: string[] = [];
 
         // Batch configuration
@@ -78,7 +79,10 @@ export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderPr
 
             const result = await uploadImage(formData);
             if (result.success && result.count) {
-                return result.count;
+                if ((result as any).duplicateCount > 0) {
+                    duplicates += (result as any).duplicateCount;
+                }
+                return (result as any).newCount ?? result.count;
             } else if (result.error) {
                 errors.push(result.error);
             }
@@ -107,6 +111,10 @@ export function ImageUploader({ onUploadSuccess, collectionId }: ImageUploaderPr
                 if (!cancelRef.current) {
                     if (uploadedCount > 0) {
                         toast.success(`${uploadedCount}/${total} images ajoutées avec succès !`);
+                    }
+
+                    if (duplicates > 0) {
+                        toast.info(`${duplicates} doublon${duplicates > 1 ? 's' : ''} ignoré${duplicates > 1 ? 's' : ''} (déjà dans la bibliothèque)`);
                     }
 
                     if (errors.length > 0) {
