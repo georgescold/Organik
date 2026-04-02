@@ -377,7 +377,7 @@ export async function getCachedInsights(profileId: string, anthropicApiKey: stri
     return JSON.parse(cached.insights) as ProfileInsightsData;
 }
 
-export function renderInsightsAsMarkdown(insights: ProfileInsightsData): string {
+export async function renderInsightsAsMarkdown(insights: ProfileInsightsData): Promise<string> {
     const lines: string[] = [];
 
     // 1. CUMULATIVE LEARNINGS (highest priority - accumulated knowledge)

@@ -485,7 +485,7 @@ CRITIQUE: Tout hook qui ressemble, paraphrase ou réutilise le même concept est
 
     // Render insights as structured markdown (conversion + hooks + persona + learnings)
     const insightsContext = insights
-        ? `\n📊 INTELLIGENCE (${insights.metadata?.basedOnPostsCount || 0} posts, ${insights.metadata?.convertedPostsCount || 0} convertis):\n${renderInsightsAsMarkdown(insights)}`
+        ? `\n📊 INTELLIGENCE (${insights.metadata?.basedOnPostsCount || 0} posts, ${insights.metadata?.convertedPostsCount || 0} convertis):\n${await renderInsightsAsMarkdown(insights)}`
         : '';
 
     const hookFingerprint = computeHookFingerprint(recentMetrics.map(m => m.post.hookText || '').filter(h => h.length > 0));
@@ -690,7 +690,7 @@ export async function generateReplacementHook(rejectedHook: HookProposal) {
     - Garde le même style et la même voix, mais propose un angle DIFFÉRENT.
     `;
 
-    const insightsContext = insights ? `\n${renderInsightsAsMarkdown(insights)}` : '';
+    const insightsContext = insights ? `\n${await renderInsightsAsMarkdown(insights)}` : '';
 
     // Fetch hook fingerprint so replacements match creator's writing style
     const hookTexts = await fetchHookTextsForProfile(activeProfileId);
@@ -965,7 +965,7 @@ Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Change de T
 
     // 3. Performance intelligence from cached insights (rendered as structured markdown)
     const performanceIntelligence = narrativeInsights
-        ? `\n📊 INTELLIGENCE DE PERFORMANCE (${narrativeInsights.metadata?.basedOnPostsCount || 0} posts, ${narrativeInsights.metadata?.convertedPostsCount || 0} convertis):\n${renderInsightsAsMarkdown(narrativeInsights)}`
+        ? `\n📊 INTELLIGENCE DE PERFORMANCE (${narrativeInsights.metadata?.basedOnPostsCount || 0} posts, ${narrativeInsights.metadata?.convertedPostsCount || 0} convertis):\n${await renderInsightsAsMarkdown(narrativeInsights)}`
         : '';
 
     // 4. Linguistic fingerprint  - use shared helper
@@ -1782,7 +1782,7 @@ export async function remixCompetitorPost(competitorPostText: string, competitor
         const niche = (profile as any)?.niche || "General";
         const targetAudience = profile?.targetAudience || "General Audience";
 
-        const insightsMd = insights ? renderInsightsAsMarkdown(insights) : '';
+        const insightsMd = insights ? await renderInsightsAsMarkdown(insights) : '';
 
         // Fetch hook fingerprint so remixes match creator's writing style
         const hookTexts = await fetchHookTextsForProfile(activeProfileId);
@@ -1855,7 +1855,7 @@ export async function scoreCarouselBeforePublish(hookText: string, slides: Slide
             ? Math.round(topPosts.reduce((sum, m) => sum + m.views, 0) / topPosts.length)
             : 0;
 
-        const insightsContext = insights ? renderInsightsAsMarkdown(insights) : '';
+        const insightsContext = insights ? await renderInsightsAsMarkdown(insights) : '';
 
         const scoreSystemPrompt = `Tu es un analyste de performance TikTok. Évalue les carrousels AVANT publication.
 IMPORTANT: Dans TOUS les textes (improvements, strengths, formattingIssues), n'utilise JAMAIS de tirets longs ( -) ou moyens (–). Utilise uniquement des tirets courts (-), des virgules ou des points.
@@ -1973,7 +1973,7 @@ export async function improveCarouselFromScore(
         const narrativeFacts = insights?.narrativeFacts?.length
             ? `\nFAITS NARRATIFS (NE JAMAIS CONTREDIRE): ${insights.narrativeFacts.join(', ')}`
             : '';
-        const insightsMd = insights ? `\n${renderInsightsAsMarkdown(insights)}` : '';
+        const insightsMd = insights ? `\n${await renderInsightsAsMarkdown(insights)}` : '';
 
         // Find the weakest criteria to focus on
         const weakest = Object.entries(scores)
@@ -2172,7 +2172,7 @@ export async function generateVariations(seedHook: HookProposal) {
     const niche = (profile as any)?.niche || "General Content";
 
     const hookFingerprint = computeHookFingerprint(hookTexts);
-    const insightsMd = insights ? renderInsightsAsMarkdown(insights) : '';
+    const insightsMd = insights ? await renderInsightsAsMarkdown(insights) : '';
 
     const systemPrompt = `Tu es ${authority}. Tu crées du contenu dans la niche "${niche}" pour ${targetAudience}.
 LANGUE: FRANÇAIS natif uniquement. Tu tutoies. Direct, naturel, avec du punch.
