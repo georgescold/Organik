@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { getActiveProfileId } from './profile-actions';
-import { getCachedInsights } from '@/lib/ai/insights-generator';
+import { getCachedInsights, renderInsightsAsMarkdown } from '@/lib/ai/insights-generator';
 import Anthropic from '@anthropic-ai/sdk';
 
 // Claude Sonnet 4.6  - best quality/cost ratio ($3/$15 per MTok vs Opus $15/$75)
@@ -385,7 +385,7 @@ function computeHookFingerprint(allHookTexts: string[]): string {
 // Shared helper: fetch hook texts for a profile (used by hook generation functions)
 async function fetchHookTextsForProfile(profileId: string): Promise<string[]> {
     const posts = await prisma.post.findMany({
-        where: { profileId, status: { notIn: ['rejected', 'idea'] } },
+        where: { profileId, status: { notIn: ['rejected', 'idea', 'draft'] } },
         select: { hookText: true },
         orderBy: { createdAt: 'desc' },
         take: 50
@@ -400,8 +400,8 @@ export async function generateHooks() {
     const activeProfileId = await getActiveProfileId(session.user.id);
     if (!activeProfileId) return { error: 'No active profile found' };
 
-    // ✅ PERF: Parallelize profile, recentMetrics, and rejectedPosts queries
-    const [profile, recentMetrics, rejectedPosts] = await Promise.all([
+    // ✅ PERF: Parallelize profile, recentMetrics, rejectedPosts, and convertedPosts queries
+    const [profile, recentMetrics, rejectedPosts, convertedPosts] = await Promise.all([
         prisma.profile.findUnique({ where: { id: activeProfileId } }),
         prisma.metrics.findMany({
             where: {
@@ -421,6 +421,12 @@ export async function generateHooks() {
             },
             orderBy: { createdAt: 'desc' },
             select: { hookText: true, title: true }
+        }),
+        prisma.post.findMany({
+            where: { profileId: activeProfileId, converted: true },
+            include: { metrics: true },
+            orderBy: { metrics: { views: 'desc' } },
+            take: 10
         })
     ]);
 
@@ -441,16 +447,10 @@ export async function generateHooks() {
 
         let analysis = `${isViralHookData ? '🔥 HOOKS VIRAUX (10K+ VUES)' : '📈 TES HOOKS LES PLUS PERFORMANTS'}:\n`;
 
-        // Detailed per-hook breakdown
-        for (const m of topHookPosts.slice(0, 8)) {
+        for (const m of topHookPosts.slice(0, 5)) {
             const hookText = m.post.hookText || '';
-            const charCount = hookText.length;
-            const hasSuspense = hookText.includes('...');
-            const hasQuestion = hookText.includes('?');
-            const hasExclamation = hookText.includes('!');
-            const technique = hasQuestion ? 'Question' : hasSuspense ? 'Suspense' : hasExclamation ? 'Exclamation' : 'Affirmation';
-
-            analysis += `  "${hookText}" → ${m.views.toLocaleString()} vues | ${charCount} chars | Technique: ${technique}\n`;
+            const technique = hookText.includes('?') ? 'Question' : hookText.includes('...') ? 'Suspense' : hookText.includes('!') ? 'Exclamation' : 'Affirmation';
+            analysis += `  "${hookText}" → ${(m.views / 1000).toFixed(1)}k vues | ${technique}\n`;
         }
 
         // Pattern analysis across hooks
@@ -483,37 +483,22 @@ CRITIQUE: Tout hook qui ressemble, paraphrase ou réutilise le même concept est
     const { client: anthropic, apiKey: userApiKey } = await getAnthropicClient(session.user.id);
     const insights = await getCachedInsights(activeProfileId, userApiKey) || null;
 
-    // Build insights context in French, focused on hooks
-    const insightsContext = (() => {
-        if (!insights) return '';
-        const parts: string[] = [];
-
-        if (insights.bestHookPatterns?.length) {
-            parts.push(`🎯 PATTERNS DE HOOKS QUI PERFORMENT:`);
-            insights.bestHookPatterns.forEach((p: any) => {
-                parts.push(`  - "${p.pattern}" → Score: ${p.avgScore.toFixed(1)}/10, Vues: ${p.avgViews.toLocaleString()}`);
-                if (p.examples?.length) parts.push(`    Exemples: ${p.examples.slice(0, 2).join(' | ')}`);
-            });
-        }
-        if (insights.viralTriggers?.length) {
-            parts.push(`⚡ Déclencheurs viraux: ${insights.viralTriggers.join(', ')}`);
-        }
-        if (insights.personaInsights?.toneThatWorks) {
-            parts.push(`🎤 Ton qui fonctionne: ${insights.personaInsights.toneThatWorks}`);
-        }
-        if (insights.personaInsights?.effectiveTopics?.length) {
-            parts.push(`📌 Sujets qui engagent: ${insights.personaInsights.effectiveTopics.join(', ')}`);
-        }
-        if (insights.narrativeFacts?.length) {
-            parts.push(`📜 FAITS NARRATIFS (NE JAMAIS CONTREDIRE):`);
-            insights.narrativeFacts.forEach((f: string) => parts.push(`  - ${f}`));
-        }
-
-        return parts.length > 0 ? `\n📊 INTELLIGENCE (basé sur ${insights.metadata?.basedOnPostsCount || 0} posts analysés):\n${parts.join('\n')}` : '';
-    })();
+    // Render insights as structured markdown (conversion + hooks + persona + learnings)
+    const insightsContext = insights
+        ? `\n📊 INTELLIGENCE (${insights.metadata?.basedOnPostsCount || 0} posts, ${insights.metadata?.convertedPostsCount || 0} convertis):\n${renderInsightsAsMarkdown(insights)}`
+        : '';
 
     const hookFingerprint = computeHookFingerprint(recentMetrics.map(m => m.post.hookText || '').filter(h => h.length > 0));
 
+
+    // Build conversion intelligence context
+    const conversionContext = (() => {
+        if (convertedPosts.length === 0) return '';
+        let ctx = `\n🎯 POSTS QUI ONT CONVERTI (PRIORITÉ MAXIMALE - ces hooks ont généré des ventes):\n`;
+        ctx += convertedPosts.map(p => `  ✅ "${p.hookText}" → ${p.metrics?.views ? `${(p.metrics.views / 1000).toFixed(1)}k vues` : 'vues N/A'} ${p.conversionNote ? `(${p.conversionNote})` : ''}`).join('\n');
+        ctx += `\n\nRÈGLE: Tes nouveaux hooks doivent s'INSPIRER des mécanismes de ces hooks convertisseurs. La viralité sans conversion ne sert à rien.\n`;
+        return ctx;
+    })();
 
     const systemPrompt = `Tu es ${authority}. Tu ne "joues" pas un rôle  - tu ES cette personne. Tu crées du contenu dans la niche "${niche}" et chaque hook que tu écris doit sonner exactement comme toi.
 
@@ -526,6 +511,7 @@ Tu sais ce qui les fait s'arreter de scroller. Tu connais leurs frustrations, le
 ${'═'.repeat(50)}
 🧠 ANALYSE DE TES HOOKS  - C'EST TA BASE
 ${'═'.repeat(50)}
+${conversionContext}
 ${deepHookAnalysis}
 ${flopContext}
 ${insightsContext}
@@ -704,9 +690,7 @@ export async function generateReplacementHook(rejectedHook: HookProposal) {
     - Garde le même style et la même voix, mais propose un angle DIFFÉRENT.
     `;
 
-    const insightsContext = insights?.bestHookPatterns
-        ? `\nPATTERNS QUI FONCTIONNENT: ${insights.bestHookPatterns.map((p: any) => p.pattern).join(', ')}`
-        : '';
+    const insightsContext = insights ? `\n${renderInsightsAsMarkdown(insights)}` : '';
 
     // Fetch hook fingerprint so replacements match creator's writing style
     const hookTexts = await fetchHookTextsForProfile(activeProfileId);
@@ -790,8 +774,8 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     const activeProfileId = await getActiveProfileId(finalUserId);
     if (!activeProfileId) return { error: 'No active profile found' };
 
-    // ✅ PERF: Parallelize profile + posts + existingSlides + insights + productBible queries
-    const [profile, allTopPosts, existingPosts, narrativeInsights, productBibleData] = await Promise.all([
+    // ✅ PERF: Parallelize profile + posts + existingSlides + insights + productBible + convertedPosts queries
+    const [profile, allTopPosts, existingPosts, narrativeInsights, productBibleData, convertedPosts] = await Promise.all([
         prisma.profile.findUnique({ where: { id: activeProfileId } }),
         // Fetch top 20 posts by views  - we'll segment viral (10k+) vs best performers after
         prisma.metrics.findMany({
@@ -807,7 +791,7 @@ export async function generateCarousel(hook: string, collectionId?: string, user
         prisma.post.findMany({
             where: {
                 profileId: activeProfileId,
-                status: { notIn: ['rejected', 'idea'] },
+                status: { notIn: ['rejected', 'idea', 'draft'] },
                 slides: { not: '[]' }
             },
             orderBy: { createdAt: 'desc' },
@@ -824,7 +808,14 @@ export async function generateCarousel(hook: string, collectionId?: string, user
                     select: { productBible: true, productName: true }
                 }
             }
-        }).catch(() => null)
+        }).catch(() => null),
+        // Fetch posts that actually converted (sales/leads)
+        prisma.post.findMany({
+            where: { profileId: activeProfileId, converted: true },
+            include: { metrics: true },
+            orderBy: { metrics: { views: 'desc' } },
+            take: 10
+        })
     ]);
 
     // Extract product bible if available
@@ -867,38 +858,27 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     const uniquenessContext = (() => {
         let ctx = '';
 
-        // STRICT: last 5 posts  - absolutely no reuse (text OR images)
+        // STRICT: last 3 posts full slide texts  - absolutely no reuse
         if (last3PostsSlideTexts.length > 0) {
-            ctx += `\n🚫 INTERDICTION ABSOLUE  - SLIDES DES DERNIERS POSTS (ne JAMAIS réutiliser, même reformulé):
+            ctx += `\n🚫 INTERDICTION ABSOLUE  - SLIDES DES 3 DERNIERS POSTS (ne JAMAIS réutiliser, même reformulé):
 ${last3PostsSlideTexts.map(t => `  ✗ "${t}"`).join('\n')}
 `;
         }
 
-        // HOOKS ALREADY USED  - prevent same angles/topics from repeating
+        // HOOKS ALREADY USED  - prevent same angles/topics from repeating (max 15)
         if (existingHooks.length > 0) {
             ctx += `\n🚫 HOOKS/SUJETS DÉJÀ TRAITÉS (ne JAMAIS refaire le même angle ou sujet):
-${existingHooks.slice(0, 30).map(h => `  ✗ "${h}"`).join('\n')}
-Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Pas de reformulation, pas de synonymes, pas le même sujet sous un autre titre. Change de THÈME, de PERSPECTIVE, d'ÉMOTION.\n`;
-        }
-
-        // SOFT: all other existing slide texts  - avoid duplication (limited to 40 for better coverage)
-        const olderTexts = existingSlideTexts.filter(t => !last3PostsSlideTexts.includes(t));
-        if (olderTexts.length > 0) {
-            ctx += `\n⚠️ TEXTES DÉJÀ UTILISÉS DANS DES SLIDES (interdit de les réutiliser ou paraphraser):
-${olderTexts.slice(0, 40).map(t => `  - "${t}"`).join('\n')}
-Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAIS VUE dans les posts précédents. Pas de paraphrase, pas de reformulation  - du contenu 100% NEUF.\n`;
+${existingHooks.slice(0, 15).map(h => `  ✗ "${h}"`).join('\n')}
+Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Change de THÈME, de PERSPECTIVE, d'ÉMOTION.\n`;
         }
 
         return ctx;
     })();
 
-    // Build narrative consistency context from insights
-    const narrativeContext = narrativeInsights?.narrativeFacts && narrativeInsights.narrativeFacts.length > 0
-        ? `\n📜 NARRATIVE CONSISTENCY (IMMUTABLE FACTS - NEVER CONTRADICT):
-           These are established facts about the creator from their previous posts. Your carousel content MUST NOT contradict ANY of these:
-           ${narrativeInsights.narrativeFacts.map((f: string) => `- ${f}`).join('\n')}
-
-           Example: If a fact says "major de promo depuis la L1", do NOT write slides about failing or dropping out of L1. Stay consistent with the creator's established narrative.`
+    // Narrative facts are already in performanceIntelligence via renderInsightsAsMarkdown
+    // Keep a short reminder for emphasis in the carousel prompt
+    const narrativeContext = narrativeInsights?.narrativeFacts?.length
+        ? `\n📜 FAITS NARRATIFS IMMUABLES (NE JAMAIS CONTREDIRE):\n${narrativeInsights.narrativeFacts.map((f: string) => `- ${f}`).join('\n')}`
         : "";
 
     const defaultHashtags = (profile as any)?.hashtags || "";
@@ -910,13 +890,13 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
     // DEEP VIRAL ANALYSIS  - Extract patterns, structures, and techniques
     // ═══════════════════════════════════════════════════════════════════
 
-    // 1. Description style examples
+    // 1. Description style examples (top 2, truncated)
     const descriptionStyleContext = viralPosts.length > 0
         ? `YOUR BEST-PERFORMING DESCRIPTIONS (MIMIC THIS STYLE):
-           ${viralPosts.slice(0, 3).filter(p => p.post.description).map(p => `"${p.post.description}" (${p.views.toLocaleString()} views)`).join('\n           ')}`
+           ${viralPosts.slice(0, 2).filter(p => p.post.description).map(p => `"${(p.post.description || '').slice(0, 150)}${(p.post.description || '').length > 150 ? '...' : ''}" (${(p.views / 1000).toFixed(1)}k vues)`).join('\n           ')}`
         : "";
 
-    // 2. Deep viral slides analysis  - not just text, but STRUCTURE, PATTERNS, TECHNIQUES
+    // 2. Deep viral slides analysis  - full slides for top 2, summary for rest
     const deepViralAnalysis = (() => {
         if (viralPosts.length === 0) return '';
 
@@ -940,26 +920,23 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
         const viralLabel = isViralData ? '🔥 VIRAL' : '📈 TOP-PERFORMING';
         let analysis = `\n${viralLabel} POSTS  - DEEP ANALYSIS (${postsWithSlides.length} posts, ${isViralData ? '10k+ views each' : 'your best performers'}):\n`;
 
-        // Per-post detailed breakdown
-        for (const post of postsWithSlides) {
-            const slideTexts = post.slides.map(s => s.text);
-            const avgWordsPerSlide = Math.round(slideTexts.reduce((sum, t) => sum + t.split(/\s+/).length, 0) / slideTexts.length);
-            const slidesWithSuspense = slideTexts.filter(t => t.includes('...')).length;
-            const slidesWithQuestion = slideTexts.filter(t => t.includes('?')).length;
-            const totalSlides = post.slides.length;
-
-            analysis += `\n━━━ "${post.hook}" (${post.views.toLocaleString()} vues) ━━━\n`;
-            analysis += `Structure: ${totalSlides} slides | ~${avgWordsPerSlide} mots/slide | ${slidesWithSuspense}/${totalSlides} slides avec "..." | ${slidesWithQuestion}/${totalSlides} slides avec "?"\n`;
+        // Full slide-by-slide breakdown for top 2 posts only
+        for (const post of postsWithSlides.slice(0, 2)) {
+            analysis += `\n━━━ "${post.hook}" (${(post.views / 1000).toFixed(1)}k vues) ━━━\n`;
             analysis += `Contenu complet des slides:\n`;
             post.slides.forEach(s => {
                 analysis += `  [${s.slide_number}] "${s.text}"\n`;
             });
         }
 
+        // Condensed summary for posts 3-5
+        for (const post of postsWithSlides.slice(2)) {
+            analysis += `\n"${post.hook}" → ${(post.views / 1000).toFixed(1)}k vues | ${post.slides.length} slides\n`;
+        }
+
         // Cross-post pattern extraction
         analysis += `\n━━━ PATTERNS IDENTIFIÉS DANS TES POSTS ${isViralData ? 'VIRAUX' : 'PERFORMANTS'} ━━━\n`;
 
-        // Analyze common techniques across posts
         const allSlideTexts = postsWithSlides.flatMap(p => p.slides.map(s => s.text));
         const totalSuspense = allSlideTexts.filter(t => t.includes('...')).length;
         const totalQuestions = allSlideTexts.filter(t => t.includes('?')).length;
@@ -976,49 +953,20 @@ Chaque slide doit apporter une perspective, un exemple, ou une formulation JAMAI
         // Extract common opening patterns (slide 2  - after hook)
         const secondSlides = postsWithSlides.filter(p => p.slides.length > 1).map(p => p.slides[1].text);
         if (secondSlides.length > 0) {
-            analysis += `- Patterns d'ouverture (slide 2 après le hook): ${secondSlides.map(s => `"${s}"`).join(' | ')}\n`;
+            analysis += `- Patterns d'ouverture (slide 2 après le hook): ${secondSlides.slice(0, 3).map(s => `"${s}"`).join(' | ')}\n`;
         }
 
         // Extract CTA patterns (last slides)
         const lastSlides = postsWithSlides.map(p => p.slides[p.slides.length - 1].text);
-        analysis += `- Patterns de CTA (dernière slide): ${lastSlides.map(s => `"${s}"`).join(' | ')}\n`;
+        analysis += `- Patterns de CTA (dernière slide): ${lastSlides.slice(0, 3).map(s => `"${s}"`).join(' | ')}\n`;
 
         return analysis;
     })();
 
-    // 3. Performance intelligence from cached insights
-    const performanceIntelligence = (() => {
-        if (!narrativeInsights) return '';
-        const parts: string[] = [];
-
-        if (narrativeInsights.bestHookPatterns?.length) {
-            parts.push(`🎯 Tes patterns de hooks qui performent le mieux:`);
-            narrativeInsights.bestHookPatterns.forEach((p: any) => {
-                parts.push(`  - "${p.pattern}" → Score moyen: ${p.avgScore.toFixed(1)}/10, Vues moyennes: ${p.avgViews.toLocaleString()}`);
-                if (p.examples?.length) parts.push(`    Exemples: ${p.examples.slice(0, 2).join(' | ')}`);
-            });
-        }
-
-        if (narrativeInsights.viralTriggers?.length) {
-            parts.push(`⚡ Tes déclencheurs viraux: ${narrativeInsights.viralTriggers.join(', ')}`);
-        }
-
-        if (narrativeInsights.personaInsights?.toneThatWorks) {
-            parts.push(`🎤 Ton qui fonctionne avec ton audience: ${narrativeInsights.personaInsights.toneThatWorks}`);
-        }
-        if (narrativeInsights.personaInsights?.effectiveTopics?.length) {
-            parts.push(`📌 Sujets qui engagent ton audience: ${narrativeInsights.personaInsights.effectiveTopics.join(', ')}`);
-        }
-
-        if (narrativeInsights.strongPoints?.length) {
-            parts.push(`💪 Tes forces (à exploiter): ${narrativeInsights.strongPoints.map((s: any) => `${s.category} (${s.avgScore.toFixed(1)}pts)`).join(', ')}`);
-        }
-        if (narrativeInsights.weakPoints?.length) {
-            parts.push(`⚠️ Axes d'amélioration: ${narrativeInsights.weakPoints.map((w: any) => `${w.category} → ${w.improvements[0] || ''}`).join(', ')}`);
-        }
-
-        return parts.length > 0 ? `\n📊 INTELLIGENCE DE PERFORMANCE (basé sur ${narrativeInsights.metadata?.basedOnPostsCount || 0} posts analysés):\n${parts.join('\n')}` : '';
-    })();
+    // 3. Performance intelligence from cached insights (rendered as structured markdown)
+    const performanceIntelligence = narrativeInsights
+        ? `\n📊 INTELLIGENCE DE PERFORMANCE (${narrativeInsights.metadata?.basedOnPostsCount || 0} posts, ${narrativeInsights.metadata?.convertedPostsCount || 0} convertis):\n${renderInsightsAsMarkdown(narrativeInsights)}`
+        : '';
 
     // 4. Linguistic fingerprint  - use shared helper
     const linguisticFingerprint = (() => {
@@ -1205,6 +1153,20 @@ TON AUDIENCE: ${targetAudience}
 Tu sais exactement ce qui les empêche de dormir, ce qu'ils désirent, et quels mots les font s'arrêter de scroller. Chaque slide doit leur parler DIRECTEMENT, comme si tu leur envoyais un message personnel.
 
 --- ANALYSE DE TES POSTS ${isViralData ? 'VIRAUX (10K+ VUES)' : 'LES PLUS PERFORMANTS'} ---
+${(() => {
+    if (convertedPosts.length === 0) return '';
+    let ctx = `\n🎯 POSTS QUI ONT CONVERTI (PRIORITÉ MAXIMALE - ces patterns ont généré des ventes):\n`;
+    for (const cp of convertedPosts.slice(0, 5)) {
+        try {
+            const cpSlides = JSON.parse(cp.slides || '[]') as Slide[];
+            ctx += `  ✅ "${cp.hookText}" → ${cp.metrics?.views ? `${(cp.metrics.views / 1000).toFixed(1)}k vues` : 'N/A'} | ${cpSlides.length} slides ${cp.conversionNote ? `(${cp.conversionNote})` : ''}\n`;
+        } catch {
+            ctx += `  ✅ "${cp.hookText}" → ${cp.metrics?.views ? `${(cp.metrics.views / 1000).toFixed(1)}k vues` : 'N/A'} ${cp.conversionNote ? `(${cp.conversionNote})` : ''}\n`;
+        }
+    }
+    ctx += `\nRÈGLE: Tes nouvelles slides doivent s'INSPIRER des structures et patterns de ces posts convertisseurs. La viralité sans conversion ne sert à rien.\n`;
+    return ctx;
+})()}
 ${deepViralAnalysis}
 ${performanceIntelligence}
 ${linguisticFingerprint}
@@ -1820,9 +1782,7 @@ export async function remixCompetitorPost(competitorPostText: string, competitor
         const niche = (profile as any)?.niche || "General";
         const targetAudience = profile?.targetAudience || "General Audience";
 
-        const narrativeFacts = insights?.narrativeFacts?.length
-            ? `\nNARRATIVE FACTS (NEVER contradict): ${insights.narrativeFacts.join(', ')}`
-            : '';
+        const insightsMd = insights ? renderInsightsAsMarkdown(insights) : '';
 
         // Fetch hook fingerprint so remixes match creator's writing style
         const hookTexts = await fetchHookTextsForProfile(activeProfileId);
@@ -1831,7 +1791,7 @@ export async function remixCompetitorPost(competitorPostText: string, competitor
         const remixSystemPrompt = `Tu es un stratège de contenu pour "${authority}" dans la niche "${niche}", ciblant ${targetAudience}.
 LANGUE: FRANÇAIS uniquement. Sonne HUMAIN, pas IA. Écris comme un vrai créateur français.
 INTERDIT: Ne copie aucune phrase de l'original. N'utilise JAMAIS le caractère '→' ni les tirets longs ( -/–).
-${narrativeFacts}
+${insightsMd}
 ${hookFingerprint}
 ${hookFingerprint ? `RÈGLE CRITIQUE: Les hooks remixés DOIVENT respecter l'empreinte linguistique ci-dessus. Même ponctuation, mêmes émojis (ou absence), mêmes tics de langage, même registre. Les hooks doivent sonner comme le CRÉATEUR, pas comme le concurrent.` : ''}
 
@@ -1895,9 +1855,7 @@ export async function scoreCarouselBeforePublish(hookText: string, slides: Slide
             ? Math.round(topPosts.reduce((sum, m) => sum + m.views, 0) / topPosts.length)
             : 0;
 
-        const insightsContext = insights?.bestHookPatterns
-            ? `Best patterns: ${insights.bestHookPatterns.map(p => p.pattern).join(', ')}`
-            : '';
+        const insightsContext = insights ? renderInsightsAsMarkdown(insights) : '';
 
         const scoreSystemPrompt = `Tu es un analyste de performance TikTok. Évalue les carrousels AVANT publication.
 IMPORTANT: Dans TOUS les textes (improvements, strengths, formattingIssues), n'utilise JAMAIS de tirets longs ( -) ou moyens (–). Utilise uniquement des tirets courts (-), des virgules ou des points.
@@ -1992,7 +1950,7 @@ export async function improveCarouselFromScore(
             prisma.post.findMany({
                 where: {
                     profileId: activeProfileId,
-                    status: { notIn: ['rejected', 'idea'] },
+                    status: { notIn: ['rejected', 'idea', 'draft'] },
                     slides: { not: '[]' }
                 },
                 orderBy: { createdAt: 'desc' },
@@ -2013,8 +1971,9 @@ export async function improveCarouselFromScore(
         ).join('\n');
 
         const narrativeFacts = insights?.narrativeFacts?.length
-            ? `\nNARRATIVE FACTS (NEVER contradict): ${insights.narrativeFacts.join(', ')}`
+            ? `\nFAITS NARRATIFS (NE JAMAIS CONTREDIRE): ${insights.narrativeFacts.join(', ')}`
             : '';
+        const insightsMd = insights ? `\n${renderInsightsAsMarkdown(insights)}` : '';
 
         // Find the weakest criteria to focus on
         const weakest = Object.entries(scores)
@@ -2213,15 +2172,13 @@ export async function generateVariations(seedHook: HookProposal) {
     const niche = (profile as any)?.niche || "General Content";
 
     const hookFingerprint = computeHookFingerprint(hookTexts);
-    const narrativeFacts = insights?.narrativeFacts?.length
-        ? `\nFAITS NARRATIFS (NE JAMAIS CONTREDIRE): ${insights.narrativeFacts.join(', ')}`
-        : '';
+    const insightsMd = insights ? renderInsightsAsMarkdown(insights) : '';
 
     const systemPrompt = `Tu es ${authority}. Tu crées du contenu dans la niche "${niche}" pour ${targetAudience}.
 LANGUE: FRANÇAIS natif uniquement. Tu tutoies. Direct, naturel, avec du punch.
 PONCTUATION INTERDITE: N'utilise JAMAIS de tirets longs ( -/–). Tirets courts (-) uniquement.
 INTERDIT: le caractère '→'.
-${narrativeFacts}
+${insightsMd}
 
 CONCEPT DE BASE:
 - Angle: "${seedHook.angle}"

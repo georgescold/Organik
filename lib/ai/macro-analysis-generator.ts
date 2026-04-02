@@ -125,7 +125,7 @@ export async function generateMacroAnalysis(
         const [posts, analyses, insightsRecord] = await Promise.all([
             // Top 50 posts by views (compressed data)
             prisma.post.findMany({
-                where: { profileId: profile.id },
+                where: { profileId: profile.id, status: { notIn: ['draft', 'rejected', 'idea'] } },
                 orderBy: { metrics: { views: 'desc' } },
                 take: 50,
                 select: {

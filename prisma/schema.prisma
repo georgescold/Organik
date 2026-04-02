@@ -345,6 +345,7 @@ model Post {
   carouselJobId String?
 
   @@index([profileId])
+  @@index([profileId, status])               // Fast filtering by profile + status (learning queries)
   @@index([publishedAt])
   @@index([createdAt])                        // Fast sorting by creation date
   @@index([userId, status])                   // Fast filtering by user + status

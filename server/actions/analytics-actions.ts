@@ -524,13 +524,23 @@ export async function togglePostConversion(postId: string, converted: boolean, c
     if (!session?.user?.id) return { error: 'Unauthorized' };
 
     try {
-        await prisma.post.update({
+        const post = await prisma.post.update({
             where: { id: postId, userId: session.user.id },
             data: {
                 converted,
                 conversionNote: conversionNote ?? null,
-            }
+            },
+            select: { profileId: true }
         });
+
+        // Invalidate insights cache so conversion data feeds back into learning
+        if (post.profileId) {
+            await prisma.profileInsights.updateMany({
+                where: { profileId: post.profileId },
+                data: { basedOnPostsCount: 0 }
+            });
+        }
+
         return { success: true };
     } catch (e) {
         console.error("Toggle conversion error:", e);
