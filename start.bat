@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 
 echo ==========================================
-echo      Lancement de Viralithe...
+echo      Lancement de Organik...
 echo ==========================================
 
 :: Install dependencies if needed

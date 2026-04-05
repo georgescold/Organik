@@ -1,6 +1,6 @@
-# 📚 Documentation API Revolution
+# 📚 Documentation API Organik
 
-Bienvenue dans la documentation de l'API Revolution pour la génération de carrousels Instagram/TikTok.
+Bienvenue dans la documentation de l'API Organik pour la génération de carrousels Instagram/TikTok.
 
 ## 📖 Documents Disponibles
 
@@ -165,7 +165,7 @@ Lorsque la limite est atteinte:
 1. **Ne jamais exposer** vos clés dans le code client
 2. **Utiliser des variables d'environnement**
    ```bash
-   REVOLUTION_API_KEY=sk_live_xxx
+   ORGANIK_API_KEY=sk_live_xxx
    ```
 3. **Révoquer immédiatement** les clés compromises
 4. **Rotation régulière** des clés (tous les 90 jours)
@@ -175,7 +175,7 @@ Lorsque la limite est atteinte:
 
 ```bash
 # .env
-REVOLUTION_API_KEY=sk_live_votre_cle
+ORGANIK_API_KEY=sk_live_votre_cle
 
 # .gitignore
 .env
@@ -252,20 +252,20 @@ if (DEBUG) {
 
 ### Ressources
 
-- 📧 **Email**: support@revolution.com
-- 💬 **Discord**: [Rejoindre](https://discord.gg/revolution)
+- 📧 **Email**: support@organik.com
+- 💬 **Discord**: [Rejoindre](https://discord.gg/organik)
 - 📖 **Documentation**: Ce dossier
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/revolution/issues)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/organik/issues)
 
 ### Status API
 
 Vérifiez le status en temps réel:
-- https://status.revolution.com
+- https://status.organik.com
 
 ### Changelog
 
 Suivez les mises à jour:
-- https://revolution.com/changelog
+- https://organik.com/changelog
 
 ## 🎓 Tutoriels
 
@@ -311,6 +311,6 @@ Cette API est propriétaire. Consultez les [Terms of Service](../TERMS.md) pour 
 
 **Version**: 1.0.0
 **Dernière mise à jour**: Janvier 2024
-**Maintenu par**: Revolution Team
+**Maintenu par**: Organik Team
 
 💡 **Astuce**: Commencez par le [Quick Start Guide](../QUICK_START.md) pour être opérationnel en 5 minutes!

@@ -1,10 +1,10 @@
-# Révolution 🦠
+# Organik
 
-> **"Détends toi, ton contenu explose déjà"**
+> **"Ne suis pas la tendance. Crée-la."**
 
-**Révolution** est une application SaaS premium conçue pour créer des carrousels TikTok/Instagram viraux en exploitant vos données statistiques et une IA avancée (Claude 3.5 Sonnet).
+**Organik** est une application SaaS premium conçue pour créer des carrousels TikTok/Instagram viraux en exploitant vos données statistiques et une IA avancée (Claude Sonnet 4.6).
 
-## 🌟 Fonctionnalités Clés
+## Fonctionnalités Clés
 
 - **Authentification & Onboarding** : Profilage du créateur (Persona, Objectifs).
 - **Collections Intelligentes** : Upload d'images analysées par Vision AI (Description, Mood, Keywords).
@@ -15,16 +15,16 @@
   - Matching intelligent Images <-> Slides (sans répétition).
 - **Design Premium** : UI "TikTok-like" (Dark mode, Néon, Glassmorphism).
 
-## 🛠 Tech Stack
+## Tech Stack
 
-- **Framework** : Next.js 15+ (App Router)
+- **Framework** : Next.js 16 (App Router)
 - **Langage** : TypeScript
 - **Style** : Tailwind CSS v4 + shadcn/ui
-- **Base de données** : SQLite (Dev) / PostgreSQL (Prod) via Prisma ORM
-- **IA** : Anthropic Claude 3.5 Sonnet (via SDK)
+- **Base de données** : PostgreSQL (Supabase) via Prisma ORM
+- **IA** : Anthropic Claude Sonnet 4.6 + Haiku 4.5 (via SDK)
 - **Auth** : NextAuth.js (v5 Beta)
 
-## 🚀 Installation & Démarrage
+## Installation & Démarrage
 
 ### Pré-requis
 - Node.js 18+
@@ -33,7 +33,7 @@
 ### 1. Cloner et Installer
 ```bash
 git clone <repo>
-cd viralithe
+cd organik
 npm install
 ```
 
@@ -63,7 +63,7 @@ npm run dev
 ```
 Rendez-vous sur [http://localhost:3000](http://localhost:3000).
 
-## 📂 Structure du Projet
+## Structure du Projet
 
 ```
 /app
@@ -84,7 +84,7 @@ Rendez-vous sur [http://localhost:3000](http://localhost:3000).
   /actions     # Server Actions (Backend Logic)
 ```
 
-## 🧠 Modèle de Données (Prisma)
+## Modèle de Données (Prisma)
 
 - **User** : Compte utilisateur.
 - **Profile** : Données TikTok (Bio, Persona).
@@ -93,4 +93,4 @@ Rendez-vous sur [http://localhost:3000](http://localhost:3000).
 - **Metrics** : Vues, Likes, Saves pour le ML.
 
 ---
-**Note** : L'application utilise `turbopack` par défaut avec Next.js 15/16. Si vous rencontrez des erreurs de build sur Windows liées aux symlinks, utilisez `npm run dev` pour le développement.
+**Note** : L'application utilise `turbopack` par défaut avec Next.js 16. Si vous rencontrez des erreurs de build sur Windows liées aux symlinks, utilisez `npm run dev` pour le développement.

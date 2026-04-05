@@ -1,4 +1,4 @@
-# 📘 API Reference - Revolution Carousel Generator
+# 📘 API Reference - Organik Carousel Generator
 
 ## Table des Matières
 
@@ -19,7 +19,7 @@
 
 ## Introduction
 
-L'API Revolution vous permet de générer des carrousels Instagram/TikTok via des requêtes HTTP simples. L'API utilise Claude Opus pour créer du contenu viral optimisé avec des images automatiquement associées depuis votre bibliothèque.
+L'API Organik vous permet de générer des carrousels Instagram/TikTok via des requêtes HTTP simples. L'API utilise Claude Opus pour créer du contenu viral optimisé avec des images automatiquement associées depuis votre bibliothèque.
 
 ### Base URL
 
@@ -182,7 +182,7 @@ X-API-Key: sk_live_votre_cle
 #### Exemple cURL
 
 ```bash
-curl -X POST https://api.revolution.com/v1/carousels/generate \
+curl -X POST https://api.organik.com/v1/carousels/generate \
   -H "X-API-Key: sk_live_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -249,7 +249,7 @@ X-API-Key: sk_live_votre_cle
 #### Exemple cURL
 
 ```bash
-curl "https://api.revolution.com/v1/carousels?limit=10&status=published" \
+curl "https://api.organik.com/v1/carousels?limit=10&status=published" \
   -H "X-API-Key: sk_live_abc123..."
 ```
 
@@ -320,7 +320,7 @@ X-API-Key: sk_live_votre_cle
 #### Exemple cURL
 
 ```bash
-curl https://api.revolution.com/v1/carousels/clxxx789 \
+curl https://api.organik.com/v1/carousels/clxxx789 \
   -H "X-API-Key: sk_live_abc123..."
 ```
 
@@ -442,7 +442,7 @@ X-API-Key: sk_live_votre_cle
 #### Exemple cURL
 
 ```bash
-curl -X PUT https://api.revolution.com/v1/carousels/clxxx789 \
+curl -X PUT https://api.organik.com/v1/carousels/clxxx789 \
   -H "X-API-Key: sk_live_abc123..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -513,7 +513,7 @@ X-API-Key: sk_live_votre_cle
 #### Exemple cURL
 
 ```bash
-curl -X DELETE https://api.revolution.com/v1/carousels/clxxx789 \
+curl -X DELETE https://api.organik.com/v1/carousels/clxxx789 \
   -H "X-API-Key: sk_live_abc123..."
 ```
 
@@ -615,7 +615,7 @@ npm install axios
 
 ```typescript
 const API_KEY = 'sk_live_votre_cle';
-const BASE_URL = 'https://api.revolution.com/v1';
+const BASE_URL = 'https://api.organik.com/v1';
 
 interface GenerateCarouselRequest {
   topic: string;
@@ -716,7 +716,7 @@ async function main() {
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://api.revolution.com/v1',
+  baseURL: 'https://api.organik.com/v1',
   headers: {
     'X-API-Key': 'sk_live_votre_cle',
   },
@@ -759,8 +759,8 @@ import requests
 from typing import Optional, Dict, List
 from datetime import datetime
 
-class RevolutionAPI:
-    def __init__(self, api_key: str, base_url: str = "https://api.revolution.com/v1"):
+class OrganikAPI:
+    def __init__(self, api_key: str, base_url: str = "https://api.organik.com/v1"):
         self.api_key = api_key
         self.base_url = base_url
         self.session = requests.Session()
@@ -853,7 +853,7 @@ class RevolutionAPI:
 
 # Utilisation
 if __name__ == '__main__':
-    api = RevolutionAPI('sk_live_votre_cle')
+    api = OrganikAPI('sk_live_votre_cle')
 
     try:
         # Générer un carrousel
@@ -889,11 +889,11 @@ if __name__ == '__main__':
 ```php
 <?php
 
-class RevolutionAPI {
+class OrganikAPI {
     private $apiKey;
     private $baseUrl;
 
-    public function __construct($apiKey, $baseUrl = 'https://api.revolution.com/v1') {
+    public function __construct($apiKey, $baseUrl = 'https://api.organik.com/v1') {
         $this->apiKey = $apiKey;
         $this->baseUrl = $baseUrl;
     }
@@ -944,7 +944,7 @@ class RevolutionAPI {
 }
 
 // Utilisation
-$api = new RevolutionAPI('sk_live_votre_cle');
+$api = new OrganikAPI('sk_live_votre_cle');
 
 try {
     $carousel = $api->generateCarousel('5 tips fitness', 7);
@@ -961,8 +961,8 @@ require 'net/http'
 require 'json'
 require 'uri'
 
-class RevolutionAPI
-  def initialize(api_key, base_url = 'https://api.revolution.com/v1')
+class OrganikAPI
+  def initialize(api_key, base_url = 'https://api.organik.com/v1')
     @api_key = api_key
     @base_url = base_url
   end
@@ -1009,7 +1009,7 @@ class RevolutionAPI
 end
 
 # Utilisation
-api = RevolutionAPI.new('sk_live_votre_cle')
+api = OrganikAPI.new('sk_live_votre_cle')
 
 begin
   carousel = api.generate_carousel(
@@ -1039,7 +1039,7 @@ Les webhooks vous permettront de recevoir des notifications en temps réel lors 
 
 ```json
 {
-  "url": "https://votre-app.com/webhooks/revolution",
+  "url": "https://votre-app.com/webhooks/organik",
   "events": ["carousel.generated", "carousel.failed"],
   "secret": "whsec_xxxxx"
 }
@@ -1114,25 +1114,25 @@ async function generateWithRetry(topic: string, maxRetries = 3) {
 ### Ressources
 
 - 📖 **Documentation**: Cette page
-- 💬 **Support**: support@revolution.com
-- 🐛 **Bugs**: https://github.com/revolution/issues
-- 💡 **Feature Requests**: https://revolution.canny.io
+- 💬 **Support**: support@organik.com
+- 🐛 **Bugs**: https://github.com/organik/issues
+- 💡 **Feature Requests**: https://organik.canny.io
 
 ### Status API
 
 Vérifiez le status de l'API en temps réel:
-- https://status.revolution.com
+- https://status.organik.com
 
 ### Changelog
 
 Suivez les mises à jour de l'API:
-- https://revolution.com/changelog
+- https://organik.com/changelog
 
 ---
 
 **Version**: 1.2.0
 **Dernière mise à jour**: Février 2024
-**Maintenu par**: Revolution Team
+**Maintenu par**: Organik Team
 
 ### Changelog
 
