@@ -447,7 +447,7 @@ export async function generateHooks() {
 
         let analysis = `${isViralHookData ? '🔥 HOOKS VIRAUX (10K+ VUES)' : '📈 TES HOOKS LES PLUS PERFORMANTS'}:\n`;
 
-        for (const m of topHookPosts.slice(0, 5)) {
+        for (const m of topHookPosts.slice(0, 8)) {
             const hookText = m.post.hookText || '';
             const technique = hookText.includes('?') ? 'Question' : hookText.includes('...') ? 'Suspense' : hookText.includes('!') ? 'Exclamation' : 'Affirmation';
             analysis += `  "${hookText}" → ${(m.views / 1000).toFixed(1)}k vues | ${technique}\n`;
@@ -777,15 +777,15 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     // ✅ PERF: Parallelize profile + posts + existingSlides + insights + productBible + convertedPosts queries
     const [profile, allTopPosts, existingPosts, narrativeInsights, productBibleData, convertedPosts] = await Promise.all([
         prisma.profile.findUnique({ where: { id: activeProfileId } }),
-        // Fetch top 20 posts by views  - we'll segment viral (10k+) vs best performers after
+        // Fetch top 30 posts by views  - we'll segment viral (10k+) vs best performers after
         prisma.metrics.findMany({
             where: {
                 post: { profileId: activeProfileId, status: { not: 'draft' } },
                 views: { gte: 1 }
             },
-            take: 20,
+            take: 30,
             orderBy: { views: 'desc' },
-            include: { post: true }
+            include: { post: { include: { analysis: { select: { intelligentScore: true } } } } }
         }),
         // Fetch slide texts from recent posts for uniqueness + linguistic fingerprint
         prisma.post.findMany({
@@ -823,11 +823,32 @@ export async function generateCarousel(hook: string, collectionId?: string, user
     const productName = productBibleData?.adminPanel?.productName || null;
     console.log(`📦 Product Bible: profile=${activeProfileId}, linked=${!!productBibleData}, bible=${productBible ? `✅ (${productBible.length} chars, product: ${productName})` : '❌ none'}`);
 
-    // Segment posts: viral (10k+ views) vs top performers (best available)
-    const trulyViralPosts = allTopPosts.filter(m => m.views >= VIRAL_THRESHOLD);
-    // Use viral posts if available, otherwise fallback to top 5 by views
-    const viralPosts = trulyViralPosts.length >= 3 ? trulyViralPosts.slice(0, 5) : allTopPosts.slice(0, 5);
-    const isViralData = trulyViralPosts.length >= 3;
+    // ═══════════════════════════════════════════════════════════════════
+    // SUPER POST RANKING: converted+IFS > converted > viral > rest
+    // ═══════════════════════════════════════════════════════════════════
+    const convertedIds = new Set(convertedPosts.map(cp => cp.id));
+    const superPosts: typeof allTopPosts = [];     // converted + IFS >= 65
+    const converterPosts: typeof allTopPosts = [];  // converted, any IFS
+    const viralOnlyPosts: typeof allTopPosts = [];  // 10k+ views, not converted
+
+    for (const vp of allTopPosts) {
+        const isConverted = convertedIds.has(vp.post.id);
+        const ifsScore = (vp.post as any).analysis?.intelligentScore ?? 0;
+        if (isConverted && ifsScore >= 65) superPosts.push(vp);
+        else if (isConverted) converterPosts.push(vp);
+        else if (vp.views >= VIRAL_THRESHOLD) viralOnlyPosts.push(vp);
+    }
+
+    // Priority: super > converter > viral, then remaining top posts
+    const remainingPosts = allTopPosts.filter(vp =>
+        !convertedIds.has(vp.post.id) && vp.views < VIRAL_THRESHOLD
+    );
+    const rankedPosts = [...superPosts, ...converterPosts, ...viralOnlyPosts, ...remainingPosts];
+    const viralPosts = rankedPosts.slice(0, 5);
+    const isViralData = viralOnlyPosts.length >= 3 || superPosts.length > 0;
+    const hasSuperPosts = superPosts.length > 0;
+
+    console.log(`🏆 Post ranking: ${superPosts.length} super, ${converterPosts.length} converters, ${viralOnlyPosts.length} viral, ${remainingPosts.length} other`);
 
     // Extract existing slide texts AND image_ids from recent posts
     const existingSlideTexts: string[] = [];
@@ -865,10 +886,10 @@ ${last3PostsSlideTexts.map(t => `  ✗ "${t}"`).join('\n')}
 `;
         }
 
-        // HOOKS ALREADY USED  - prevent same angles/topics from repeating (max 15)
+        // HOOKS ALREADY USED  - prevent same angles/topics from repeating (max 20)
         if (existingHooks.length > 0) {
             ctx += `\n🚫 HOOKS/SUJETS DÉJÀ TRAITÉS (ne JAMAIS refaire le même angle ou sujet):
-${existingHooks.slice(0, 15).map(h => `  ✗ "${h}"`).join('\n')}
+${existingHooks.slice(0, 20).map(h => `  ✗ "${h}"`).join('\n')}
 Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Change de THÈME, de PERSPECTIVE, d'ÉMOTION.\n`;
         }
 
@@ -893,14 +914,14 @@ Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Change de T
     // 1. Description style examples (top 2, truncated)
     const descriptionStyleContext = viralPosts.length > 0
         ? `YOUR BEST-PERFORMING DESCRIPTIONS (MIMIC THIS STYLE):
-           ${viralPosts.slice(0, 2).filter(p => p.post.description).map(p => `"${(p.post.description || '').slice(0, 150)}${(p.post.description || '').length > 150 ? '...' : ''}" (${(p.views / 1000).toFixed(1)}k vues)`).join('\n           ')}`
+           ${viralPosts.slice(0, 3).filter(p => p.post.description).map(p => `"${(p.post.description || '').slice(0, 150)}${(p.post.description || '').length > 150 ? '...' : ''}" (${(p.views / 1000).toFixed(1)}k vues)`).join('\n           ')}`
         : "";
 
-    // 2. Deep viral slides analysis  - full slides for top 2, summary for rest
+    // 2. Deep slides analysis  - full slide-by-slide for top 5 ranked posts (Super > Converter > Viral)
     const deepViralAnalysis = (() => {
         if (viralPosts.length === 0) return '';
 
-        const postsWithSlides: { hook: string; views: number; slides: Slide[]; description: string }[] = [];
+        const postsWithSlides: { hook: string; views: number; slides: Slide[]; description: string; isSuper: boolean; isConverter: boolean }[] = [];
         for (const vp of viralPosts.slice(0, 5)) {
             try {
                 const vSlides = JSON.parse(vp.post.slides || '[]') as Slide[];
@@ -909,7 +930,9 @@ Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Change de T
                         hook: vp.post.hookText || '',
                         views: vp.views,
                         slides: vSlides,
-                        description: vp.post.description || ''
+                        description: vp.post.description || '',
+                        isSuper: superPosts.some(sp => sp.post.id === vp.post.id),
+                        isConverter: convertedIds.has(vp.post.id),
                     });
                 }
             } catch { /* skip */ }
@@ -917,21 +940,17 @@ Tu DOIS trouver un angle COMPLÈTEMENT DIFFÉRENT de tous ces hooks. Change de T
 
         if (postsWithSlides.length === 0) return '';
 
-        const viralLabel = isViralData ? '🔥 VIRAL' : '📈 TOP-PERFORMING';
-        let analysis = `\n${viralLabel} POSTS  - DEEP ANALYSIS (${postsWithSlides.length} posts, ${isViralData ? '10k+ views each' : 'your best performers'}):\n`;
+        const viralLabel = hasSuperPosts ? '🏆 SUPER POSTS + TOP PERFORMERS' : isViralData ? '🔥 VIRAL' : '📈 TOP-PERFORMING';
+        let analysis = `\n${viralLabel}  - DEEP ANALYSIS (${postsWithSlides.length} posts):\n`;
 
-        // Full slide-by-slide breakdown for top 2 posts only
-        for (const post of postsWithSlides.slice(0, 2)) {
-            analysis += `\n━━━ "${post.hook}" (${(post.views / 1000).toFixed(1)}k vues) ━━━\n`;
+        // Full slide-by-slide breakdown for ALL 5 ranked posts
+        for (const post of postsWithSlides.slice(0, 5)) {
+            const badge = post.isSuper ? '🏆 SUPER POST (converti + IFS eleve)' : post.isConverter ? '✅ CONVERTI' : '';
+            analysis += `\n━━━ "${post.hook}" (${(post.views / 1000).toFixed(1)}k vues) ${badge} ━━━\n`;
             analysis += `Contenu complet des slides:\n`;
             post.slides.forEach(s => {
                 analysis += `  [${s.slide_number}] "${s.text}"\n`;
             });
-        }
-
-        // Condensed summary for posts 3-5
-        for (const post of postsWithSlides.slice(2)) {
-            analysis += `\n"${post.hook}" → ${(post.views / 1000).toFixed(1)}k vues | ${post.slides.length} slides\n`;
         }
 
         // Cross-post pattern extraction

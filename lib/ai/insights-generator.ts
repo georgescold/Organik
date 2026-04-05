@@ -124,7 +124,7 @@ export async function generateProfileInsights(profileId: string, anthropicApiKey
     // 4. Build deep analysis data
 
     // Parse slides from converted posts for structural analysis
-    const convertedWithSlides = convertedPosts.slice(0, 8).map(p => {
+    const convertedWithSlides = convertedPosts.slice(0, 10).map(p => {
         let slides: { slide_number: number; text: string }[] = [];
         try { slides = JSON.parse((p as any).slides || '[]'); } catch { /* ignore */ }
         return { ...p, parsedSlides: slides };
@@ -182,7 +182,7 @@ ${a.parsedSlides.map(s => `  [${s.slide_number}] "${s.text}"`).join('\n')}` : ''
 
     const lowPerformersSection = lowPosts.length > 0 ? `
 === FLOPS (${lowPosts.length} posts, score < 50) ===
-${lowPosts.slice(0, 4).map(a => `- "${truncHook(a.post.hookText)}" -> ${a.post.metrics?.views?.toLocaleString() || 0} vues, IFS: ${a.intelligentScore.toFixed(1)}/100, Hook: ${a.qsHookTotal.toFixed(1)}/25`).join('\n')}
+${lowPosts.slice(0, 5).map(a => `- "${truncHook(a.post.hookText)}" -> ${a.post.metrics?.views?.toLocaleString() || 0} vues, IFS: ${a.intelligentScore.toFixed(1)}/100, Hook: ${a.qsHookTotal.toFixed(1)}/25`).join('\n')}
 ` : '';
 
     const previousLearningsSection = previousLearnings.length > 0 ? `
@@ -406,7 +406,7 @@ export async function renderInsightsAsMarkdown(insights: ProfileInsightsData): P
         if (cp.conversionRate > 0) {
             lines.push(`Taux: ${cp.conversionRate.toFixed(1)}% | Vues moy.: ${Math.round(cp.avgViewsOnConverted).toLocaleString()}`);
         }
-        if (cp.convertedHooks?.length) lines.push(`Hooks convertis: ${cp.convertedHooks.slice(0, 5).join(' | ')}`);
+        if (cp.convertedHooks?.length) lines.push(`Hooks convertis: ${cp.convertedHooks.slice(0, 8).join(' | ')}`);
         if (cp.convertingAngles?.length) lines.push(`Angles: ${cp.convertingAngles.join(', ')}`);
         if (cp.conversionTriggers?.length) lines.push(`Declencheurs: ${cp.conversionTriggers.join(', ')}`);
         lines.push('');
@@ -415,7 +415,7 @@ export async function renderInsightsAsMarkdown(insights: ProfileInsightsData): P
     // 4. Hook patterns
     if (insights.bestHookPatterns?.length) {
         lines.push('## HOOKS PERFORMANTS');
-        insights.bestHookPatterns.slice(0, 5).forEach(p => {
+        insights.bestHookPatterns.slice(0, 8).forEach(p => {
             const exStr = p.examples?.length ? ` ex: "${p.examples[0]}"` : '';
             lines.push(`- ${p.pattern} (score ${p.avgScore.toFixed(1)}, ${Math.round(p.avgViews).toLocaleString()} vues)${exStr}`);
         });
