@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 import { Toaster } from "@/components/ui/sonner";
 import { HomeButton } from "@/components/ui/home-button";
-import { TwemojiProvider } from "@/components/twemoji-provider";
+import { TwemojiProvider } from "@/components/providers/twemoji-provider";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 
 export const metadata: Metadata = {

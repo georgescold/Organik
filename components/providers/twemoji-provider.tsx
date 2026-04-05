@@ -1,6 +1,6 @@
 'use client';
 
-import { useTwemoji } from '@/lib/use-twemoji';
+import { useTwemoji } from '@/hooks/use-twemoji';
 
 /**
  * Global Twemoji provider - renders emojis as Twitter-style SVG images

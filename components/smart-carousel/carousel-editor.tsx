@@ -19,7 +19,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEditorFonts } from '@/lib/use-editor-fonts';
+import { useEditorFonts } from '@/hooks/use-editor-fonts';
 // html2canvas removed — export now uses native Canvas 2D for accurate image dimensions
 import { saveAs } from 'file-saver';
 import { toast } from 'sonner';

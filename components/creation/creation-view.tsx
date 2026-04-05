@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { generateHooks, generateCarousel, saveCarousel, getDrafts, updatePostContent, saveHookAsIdea, getSavedIdeas, deletePost, rejectHook, generateReplacementHook, generateVariations, getPost, scoreCarouselBeforePublish, improveCarouselFromScore, HookProposal, Slide } from '@/server/actions/creation-actions';
-import { loadTwemojiScript } from '@/lib/use-twemoji';
+import { loadTwemojiScript } from '@/hooks/use-twemoji';
 import { retryFailedAnalyses, getUserImages } from '@/server/actions/image-actions';
 import { getUserCollections } from '@/server/actions/collection-actions';
 import { toast } from 'sonner';
