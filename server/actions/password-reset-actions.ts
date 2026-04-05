@@ -119,7 +119,7 @@ export async function requestPasswordReset(formData: z.infer<typeof RequestReset
         });
 
         // Build reset URL
-        const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || 'https://organik-n804.onrender.com';
+        const baseUrl = process.env.NEXTAUTH_URL || process.env.AUTH_URL || '';
         const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
         // Send email via Resend
