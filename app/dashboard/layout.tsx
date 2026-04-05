@@ -38,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {/* Space Background Layer (Masked to Header) — Simplified */}
             <div className="absolute inset-0 z-0 pointer-events-none">
                 {/* Subtle noise texture */}
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 brightness-100 mix-blend-overlay"></div>
+                <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10 brightness-100 mix-blend-overlay"></div>
                 {/* Stars - White (single layer, reduced density) */}
                 <div className="absolute inset-0 animate-[fly_25s_linear_infinite] hidden md:block"
                     style={{

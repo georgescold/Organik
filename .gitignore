@@ -13,3 +13,5 @@ build
 node_modules
 nul
 .claude/
+
+.vercel
